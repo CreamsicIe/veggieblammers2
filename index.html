@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Veggie Blammers 1942</title>
 <meta name="description" content="A 3D victory-garden shooter where every fighter is a vegetable in a 1942 helmet. Play solo against bots or online with friends using a 4-digit lobby code.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Veggie Blammers">
+<meta name="theme-color" content="#2B1238">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -37,6 +45,8 @@ html,body{height:100%}
 body{background:var(--sky);color:var(--ink);font-family:var(--ui);font-size:15px;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 #stage{position:fixed;inset:0;background:var(--sky)}
 #stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{-webkit-touch-callout:none}
 button{font:inherit;color:inherit}
 .cap{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:800}
 .num{font-family:var(--num);font-weight:800;font-variant-numeric:tabular-nums}
@@ -261,7 +271,7 @@ body.touch #netPill{bottom:auto;top:calc(150px + env(safe-area-inset-top,0px))}
 body.touch #bombNote{bottom:calc(200px + env(safe-area-inset-bottom,0px))}
 .invite{display:grid;gap:6px;width:100%;text-align:left}
 .inviterow{display:flex;gap:8px;align-items:center}
-.invinp{font-family:var(--num);font-size:13px;font-weight:700;padding:8px 10px;flex:1}
+.invinp{font-family:var(--num);font-size:16px;font-weight:700;padding:8px 10px;flex:1}
 .inviterow .btn{padding:9px 16px;font-size:15px;white-space:nowrap;flex:none}
 @media (max-width:820px){.modes{grid-template-columns:repeat(2,minmax(0,1fr))}.cols{grid-template-columns:1fr}}
 @media (max-width:420px){.inviterow{flex-wrap:wrap}.inviterow .btn{width:100%}}
@@ -277,6 +287,41 @@ body.touch #bombNote{bottom:calc(200px + env(safe-area-inset-bottom,0px))}
 }
 @media (max-width:760px){#slots{display:none}}
 @media (max-width:420px){.teams{grid-template-columns:1fr}}
+/* phones held upright: stack the HUD in rows so nothing overlaps */
+@media (max-width:560px){
+  #purity .who{display:none}
+  #match,#wave{top:calc(98px + env(safe-area-inset-top,0px))}
+  body.touch #weapon{top:calc(170px + env(safe-area-inset-top,0px))}
+  body.touch #tPause{top:calc(170px + env(safe-area-inset-top,0px))}
+}
+/* phones held sideways (and other short screens): smaller HUD, nothing under the touch buttons */
+@media (max-height:500px){
+  #purity{top:calc(6px + env(safe-area-inset-top,0px));left:max(10px,env(safe-area-inset-left,0px));padding:4px 10px 6px;width:min(200px,30vw)}
+  #purityVal{font-size:15px}
+  #purity .bar{height:10px;margin-top:3px;border-width:2px}
+  #purity .who{display:none}
+  #wave,#score{top:calc(6px + env(safe-area-inset-top,0px));padding:3px 10px 4px}
+  #waveNum,#splats{font-size:18px}
+  #score{min-width:0;right:max(10px,env(safe-area-inset-right,0px))}
+  #match{top:calc(6px + env(safe-area-inset-top,0px))}
+  #match .tm{min-width:52px;padding:2px 8px 3px}
+  #match .tm .num,#mTime{font-size:17px}
+  #match .mid{padding:2px 8px 3px}
+  #match .cap,#wave .cap,#score .cap,#purity .cap{font-size:9px}
+  #feed{top:calc(56px + env(safe-area-inset-top,0px))}
+  #banner{font-size:clamp(34px,7vw,64px);top:18%}
+  #dead{top:20%}
+  #speedo{top:calc(50% + 70px)}
+  body.touch #weapon{top:calc(66px + env(safe-area-inset-top,0px));left:max(10px,env(safe-area-inset-left,0px));right:auto;bottom:auto;padding:4px 8px 4px 4px;gap:6px}
+  body.touch #wMl{font-size:17px}
+  body.touch #wName{font-size:12px}
+  body.touch #wRes{display:none}
+  body.touch .gauge{width:10px;border-width:2px}
+  body.touch #score{right:calc(max(10px,env(safe-area-inset-right,0px)) + 50px)}
+  body.touch #tPause{top:calc(6px + env(safe-area-inset-top,0px));left:auto;right:max(10px,env(safe-area-inset-right,0px));margin-left:0;width:42px;height:42px}
+  .tbtn{width:56px;height:56px}
+  #tFire{width:80px;height:80px}
+}
 </style>
 
 <div id="stage" aria-label="Victory garden arena"></div>
@@ -558,7 +603,7 @@ function colorOf(hex){ return new THREE.Color(hex); }
 const SFX = {
   ctx:null, master:null, noise:null, muted:false,
   init(){
-    if (this.ctx){ if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    if (this.ctx){ if (this.ctx.state !== 'running'){ try { const r = this.ctx.resume(); if (r && r.catch) r.catch(() => {}); } catch (e) {} } return; }
     try {
       const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
       this.ctx = new C(); this.master = this.ctx.createGain(); this.master.gain.value = 0.45;
@@ -643,6 +688,10 @@ const SFX = {
   }
 };
 
+/* iPhone Safari suspends sound in the background (state 'interrupted'); any tap or key wakes it */
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+['touchend', 'click', 'keydown'].forEach(ev => addEventListener(ev, () => { if (SFX.ctx && SFX.ctx.state !== 'running') SFX.init(); }, { capture:true, passive:true }));
+
 /* hits landing in the same instant (a shotgun blast, a splash) ring as one ding */
 const DING = { dmg:0, tip:false, on:false, last:0 };
 function hitDing(dmg, tip){ DING.dmg += dmg || 0; DING.tip = DING.tip || !!tip; DING.on = true; }
@@ -677,7 +726,8 @@ try {
   fatal("Your browser couldn't start WebGL, which the game needs to draw the 3D garden. Try another browser or turn on hardware acceleration.");
   throw e;
 }
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+const MOBILE = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MOBILE ? 1.5 : 1.75));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -694,7 +744,7 @@ scene.add(new THREE.HemisphereLight(0xEAF4FF, 0x7D6A46, 0.74));
 const sun = new THREE.DirectionalLight(0xFFEBC6, 0.98);
 sun.position.set(-28, 60, 24);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(MOBILE ? 1024 : 2048, MOBILE ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left:-50, right:50, top:40, bottom:-40, near:10, far:170 });
 sun.shadow.bias = -0.0005;
 scene.add(sun, sun.target);
@@ -2472,6 +2522,10 @@ function endTouch(e){
   if (e.pointerId === TS.fire){ TS.fire = null; input.fire = false; $('tFire').classList.remove('down'); }
 }
 addEventListener('pointerup', endTouch); addEventListener('pointercancel', endTouch);
+// iPhone Safari: no pinch zoom or page bounce while playing, and re-measure the screen after the phone rotates
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('touchmove', e => { if ((S.mode === 'playing' || S.mode === 'paused') && !(e.target.closest && e.target.closest('.screen, #board'))) e.preventDefault(); }, { passive:false });
+addEventListener('orientationchange', () => setTimeout(() => dispatchEvent(new Event('resize')), 350));
 function tbtn(id, down){ $(id).addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); SFX.init(); down(e); }); }
 tbtn('tFire', e => { TS.fire = e.pointerId; TS.fx = e.clientX; TS.fy = e.clientY; input.fire = true; $('tFire').classList.add('down'); });
 tbtn('tJump', () => { input.tJump = true; input.jumpT = S.time; });
@@ -4066,13 +4120,23 @@ function startOnlineGame(){
 }
 
 $('createBtn').addEventListener('click', () => { SFX.init(); createLobby(); });
+const canShare = () => input.touch && typeof navigator.share === 'function';
 $('copyInvite').addEventListener('click', () => {
-  const link = inviteLink(NET.code), inp = $('inviteLink'), btn = $('copyInvite'), msg = $('inviteMsg');
+  const link = inviteLink(NET.code), inp = $('inviteLink'), btn = $('copyInvite'), msg = $('inviteMsg'), label = canShare() ? 'Share link' : 'Copy link';
   let settled = false;
-  const done = () => { if (settled) return; settled = true; btn.textContent = 'Copied!'; msg.textContent = 'Invite link copied. Paste it to your friends.'; setTimeout(() => { btn.textContent = 'Copy link'; }, 1800); };
-  const fallback = () => { if (settled) return; settled = true; inp.focus(); inp.select(); msg.textContent = 'The link is selected. Copy it with Ctrl+C (or Cmd+C on a Mac).'; };
-  try { navigator.clipboard.writeText(link).then(done, fallback); } catch (e) { fallback(); }
-  setTimeout(fallback, 1500);
+  const done = () => { if (settled) return; settled = true; btn.textContent = 'Copied!'; msg.textContent = 'Invite link copied. Paste it to your friends.'; setTimeout(() => { btn.textContent = label; }, 1800); };
+  const fallback = () => {
+    if (settled) return; settled = true; inp.focus(); inp.select(); try { inp.setSelectionRange(0, link.length); } catch (e) {}
+    msg.textContent = input.touch ? 'The link is selected. Tap it and choose Copy.' : 'The link is selected. Copy it with Ctrl+C (or Cmd+C on a Mac).';
+  };
+  const copy = () => { try { navigator.clipboard.writeText(link).then(done, fallback); } catch (e) { fallback(); } setTimeout(fallback, 1500); };
+  if (canShare()){
+    // the phone's share sheet (Messages, WhatsApp and so on); cancelling it is fine, anything else falls back to copying
+    navigator.share({ title:document.title || 'Veggie Blammers 1942', text:'Join my Veggie Blammers lobby (code ' + NET.code + ')', url:link })
+      .then(() => { msg.textContent = 'Invite sent.'; }, err => { if (!err || err.name !== 'AbortError') copy(); });
+    return;
+  }
+  copy();
 });
 $('inviteLink').addEventListener('focus', e => e.target.select());
 $('joinBtn').addEventListener('click', () => { SFX.init(); joinLobby($('codeIn').value); });
@@ -4294,6 +4358,7 @@ function enterHud(){
   $('splatLayer').textContent = ''; $('feed').textContent = '';
   for (const k in hudCache) delete hudCache[k];
   updateSlots(); updateHint();
+  if (input.touch && innerHeight > innerWidth*1.1) setTimeout(() => { if (S.mode === 'playing' && innerHeight > innerWidth*1.1) flashNote('Turn your phone sideways for a bigger view'); }, 2600);
 }
 function startSolo(game){
   SFX.init();
@@ -4395,6 +4460,15 @@ addEventListener('resize', () => {
   camera.aspect = vmCamera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix(); vmCamera.updateProjectionMatrix();
 });
+// phones can drop the 3D graphics while the game sits in the background; offer a reload instead of a frozen screen
+renderer.domElement.addEventListener('webglcontextlost', e => {
+  e.preventDefault();
+  if ($('glLost')) return;
+  const d = document.createElement('div'); d.id = 'glLost'; d.className = 'screen';
+  d.innerHTML = '<div class="panel slim"><h2 class="mid-title">Graphics paused</h2><p class="tag">Your device reset the 3D graphics, which can happen when the game sits in the background. Reload to keep playing.</p><div class="btnrow"><button class="btn" type="button">Reload</button></div></div>';
+  d.querySelector('button').addEventListener('click', () => location.reload());
+  document.body.appendChild(d);
+}, false);
 
 /* ---------- main loop ---------- */
 let lastT = performance.now();
@@ -4436,6 +4510,13 @@ function frame(now){
 /* ---------- boot ---------- */
 function boot(data){
   data = data || {};
+  if (IS_IOS && !$('iosTip')){
+    const home = typeof makeP2PRoom === 'function' && !navigator.standalone && !matchMedia('(display-mode: standalone)').matches;
+    const t = document.createElement('p'); t.id = 'iosTip'; t.className = 'small'; t.style.cssText = 'margin:0;text-align:center';
+    t.textContent = 'On iPhone or iPad: turn off Silent mode to hear the game' + (home ? ', and tap Share then Add to Home Screen to play full screen.' : '.');
+    $('menu').querySelector('.tag').after(t);
+  }
+  if (input.touch && typeof navigator.share === 'function') $('copyInvite').textContent = 'Share link';
   const saved = data.flavor || store('jbb-flavor');
   setFlavor(FLAVORS.find(f => f.id === saved) || FLAVORS[0]);
   NET.nick = cleanName(store('jbb-nick') || ('Player ' + (10 + Math.floor(Math.random()*90))));
