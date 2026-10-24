@@ -2,7 +2,7 @@
 
 A 3D first-person shooter set in a 1942 victory garden. Every fighter is a vegetable in a wartime helmet, and every weapon squirts juice.
 
-**Play:** https://creamsicie.github.io/veggieblammers2/ (after GitHub Pages is turned on). It runs in the browser with no install and no account.
+**Play:** https://creamsicie.github.io/veggieblammers2/ in any current browser, on a computer, iPhone, iPad or Android phone. No install and no account.
 
 ## Modes
 
@@ -13,6 +13,14 @@ A 3D first-person shooter set in a 1942 victory garden. Every fighter is a veget
 ## Playing online
 
 Click **Play with friends → Make lobby**, then send your friends the invite link or the 4-digit code. The host's browser runs the match, so keep that tab open. Connections go peer to peer through the free public PeerJS service; some school or work networks block them.
+
+## On iPhone and iPad
+
+The game runs in Safari with touch controls: drag on the left side of the screen to move, drag on the right side to aim, and use the buttons to squeeze, jump, duck and swap. Holding the phone sideways gives the biggest view.
+
+- **Full screen:** in Safari, tap Share, then Add to Home Screen. The game then opens from its own icon without Safari's toolbars.
+- **No sound?** iPhone keeps web pages quiet in Silent mode, so turn Silent mode off.
+- **Inviting friends:** in a lobby, **Share link** opens the share sheet so you can send the invite by Messages or any chat app.
 
 ## Movement
 

@@ -1,0 +1,15 @@
+{
+  "name": "Veggie Blammers 1942",
+  "short_name": "Veggie Blammers",
+  "description": "A 3D victory-garden shooter where every fighter is a vegetable in a 1942 helmet.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#2B1238",
+  "theme_color": "#2B1238",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
