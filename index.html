@@ -242,6 +242,7 @@ body.touch .kb-only,body:not(.touch) .touch-only{display:none}
 .plist{list-style:none;margin:0;padding:0;display:grid;gap:5px}
 .plist li{display:flex;align-items:center;gap:7px;font-weight:800;font-size:14px;min-width:0}
 .plist .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plist li.bots{font-weight:700;font-size:13px;opacity:.72}
 .plist .tag{font-size:10px;letter-spacing:.08em;text-transform:uppercase;border:2px solid var(--ink);border-radius:6px;padding:0 5px;background:var(--paper)}
 #match{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:flex;align-items:stretch;overflow:hidden}
 #match .tm{padding:5px 12px 6px;display:grid;justify-items:center;min-width:76px;color:var(--ink)}
@@ -502,6 +503,7 @@ body.touch #bombNote{bottom:calc(200px + env(safe-area-inset-bottom,0px))}
     <div id="teams" class="teams"></div>
     <div class="btnrow">
       <button id="teamBtn" class="btn ghost" type="button">Switch team</button>
+      <button id="botBtn" class="btn ghost" type="button" aria-pressed="true" title="Bots fill empty slots: 6 vs 6 in Juice Bomb, 8 in Splat Fest">Bots: on</button>
       <button id="startMatchBtn" class="btn" type="button">Start match</button>
       <button id="leaveBtn" class="btn ghost" type="button">Leave</button>
     </div>
@@ -522,6 +524,26 @@ body.touch #bombNote{bottom:calc(200px + env(safe-area-inset-bottom,0px))}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+/* if the game fails while loading, say so on screen with the browser's own words, so a friend can pass it on */
+(function(){
+  var shown = false;
+  function show(msg){
+    if (shown || window.__jbReady || !msg || msg === 'Script error.') return; shown = true;
+    var d = document.createElement('div'); d.setAttribute('role', 'alert');
+    d.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99;background:#fff;color:#2B1238;border:3px solid #2B1238;border-radius:14px;padding:12px 14px;font:600 14px/1.4 system-ui,sans-serif;box-shadow:4px 4px 0 #2B1238';
+    d.textContent = 'The game hit a problem while loading: ' + msg + '. Reload the page to try again. If it keeps happening, send this message to whoever shared the game. (' + navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 140) + ')';
+    (document.body || document.documentElement).appendChild(d);
+  }
+  window.addEventListener('error', function(e){ show(e && e.message); });
+  // a script that never arrives (blocked or a dropped connection) gets a plain-words message instead
+  window.addEventListener('error', function(e){
+    var t = e && e.target, src = t && t.tagName === 'SCRIPT' ? String(t.src || '') : '';
+    if (/three/.test(src)) show("couldn't download the 3D engine (" + src.split('/').pop() + '). Check the internet connection, turn off any content blocker or VPN for this page');
+  }, true);
+  window.addEventListener('unhandledrejection', function(e){ var r = e && e.reason; show(r && (r.message || r.code) ? String(r.message || r.code) : String(r)); });
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 'use strict';
@@ -688,10 +710,6 @@ const SFX = {
   }
 };
 
-/* iPhone Safari suspends sound in the background (state 'interrupted'); any tap or key wakes it */
-const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-['touchend', 'click', 'keydown'].forEach(ev => addEventListener(ev, () => { if (SFX.ctx && SFX.ctx.state !== 'running') SFX.init(); }, { capture:true, passive:true }));
-
 /* hits landing in the same instant (a shotgun blast, a splash) ring as one ding */
 const DING = { dmg:0, tip:false, on:false, last:0 };
 function hitDing(dmg, tip){ DING.dmg += dmg || 0; DING.tip = DING.tip || !!tip; DING.on = true; }
@@ -701,6 +719,10 @@ function flushDing(){
   if (now - DING.last < 45) return;
   SFX.ding(DING.dmg, DING.tip); DING.last = now; DING.on = false; DING.dmg = 0; DING.tip = false;
 }
+
+/* iPhone Safari suspends sound in the background (state 'interrupted'); any tap or key wakes it */
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+['touchend', 'click', 'keydown'].forEach(ev => addEventListener(ev, () => { if (SFX.ctx && SFX.ctx.state !== 'running') SFX.init(); }, { capture:true, passive:true }));
 
 /* ---------- game state ---------- */
 const S = {
@@ -720,13 +742,15 @@ const flavorById = id => FLAVORS.find(f => f.id === id) || FLAVORS[0];
    World: renderer, sky, and the 1942 victory garden bed you fight in
    ========================================================= */
 let renderer;
+const MOBILE = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+  // phones with sharp screens skip antialiasing (it costs a lot of graphics memory there), and any device that refuses gets a plain renderer
+  try { renderer = new THREE.WebGLRenderer({ antialias:!(MOBILE && (window.devicePixelRatio || 1) >= 2), powerPreference:'high-performance' }); }
+  catch (e1) { renderer = new THREE.WebGLRenderer({ antialias:false }); }
 } catch (e) {
   fatal("Your browser couldn't start WebGL, which the game needs to draw the 3D garden. Try another browser or turn on hardware acceleration.");
   throw e;
 }
-const MOBILE = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MOBILE ? 1.5 : 1.75));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -1282,6 +1306,36 @@ hayBale(17.2, 0, 19, 1.2, 1.2, 1.2); hayBale(18.4, 0, 19, 1.2, 1.2, 1.2); hayBal
 addBox(17.8, 19, 2.4, 1.2, 0, 1.2); addBox(17.2, 19, 1.2, 1.2, 1.2, 2.4);
 mud(5.0, 18.2, 2.0);
 
+/* two lookout towers: walk-up stairs (no jumping needed) to a railed deck 6 high, one near each team's spawn */
+const LOOK = { H:6, half:2.5, steps:15, run:0.75, sw:2.2, rail:0.7 }, LOOK_STEPS = [];
+function lookoutSolids(cx, cz, dir, zw){
+  const H = LOOK.H, half = LOOK.half, run = LOOK.run, sw = LOOK.sw, edge = cx + dir*half, toward = zw < cz ? 1 : -1;
+  addBox(cx, cz, half*2, half*2, H - 0.35, H);
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => addBox(cx + a*(half - 0.35), cz + b*(half - 0.35), 0.6, 0.6, 0, H - 0.35));
+  const steps = [];
+  for (let i = 0; i < LOOK.steps; i++){ const x = edge + dir*((LOOK.steps - 1 - i)*run + run/2), top = 0.4*(i + 1); addBox(x, zw, run, sw, 0, top); steps.push([x, top, zw]); }
+  const r0 = toward > 0 ? zw + sw/2 : cz - half, r1 = toward > 0 ? cz + half : zw - sw/2;
+  const rails = [[cx - dir*(half - 0.125), cz, 0.25, half*2], [cx, cz + toward*(half - 0.125), half*2, 0.25], [edge - dir*0.125, (r0 + r1)/2, 0.25, r1 - r0]];
+  rails.forEach(([x, z, w, d]) => addBox(x, z, w, d, H, H + LOOK.rail));
+  return { steps, rails, toward };
+}
+function lookout(cx, cz, dir, zw, flagCol){
+  const L = lookoutSolids(cx, cz, dir, zw), H = LOOK.H, half = LOOK.half;
+  const wood = mapMat(PLANK_C, 1, 0.5), deckTop = mapMat(PLANK_C, 1.6, 1.6), dark = lam(0x7A4E28);
+  L.steps.forEach(([x, top, z]) => LOOK_STEPS.push([x, top/2, z, 0, 0, 0, LOOK.run, top, LOOK.sw]));
+  put(new THREE.Mesh(new THREE.BoxGeometry(half*2, 0.35, half*2), [wood, wood, deckTop, wood, wood, wood]), cx, H - 0.175, cz);
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => put(new THREE.Mesh(new THREE.BoxGeometry(0.6, H - 0.35, 0.6), dark), cx + a*(half - 0.35), (H - 0.35)/2, cz + b*(half - 0.35)));
+  L.rails.forEach(([x, z, w, d]) => put(new THREE.Mesh(new THREE.BoxGeometry(w, LOOK.rail, d), wood), x, H + LOOK.rail/2, z));
+  // a pennant in the team's colour so each side can spot its tower from across the garden
+  const px = cx - dir*(half - 0.3), pz = cz + L.toward*(half - 0.3);
+  put(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 4.2, 6), dark), px, H + 2.1, pz, true, false);
+  const tri = new THREE.Shape(); tri.moveTo(0, 0); tri.lineTo(2, -0.6); tri.lineTo(0, -1.2); tri.closePath();
+  const flag = put(new THREE.Mesh(new THREE.ShapeGeometry(tri), lam(flagCol, { side:THREE.DoubleSide })), px, H + 4.1, pz, true, false);
+  flag.rotation.y = dir > 0 ? 0 : Math.PI;
+}
+lookout(-34.5, -23, 1, -24.9, TEAMS.a.color);   // north-west, by the Victory Garden spawn
+lookout(34.5, 23, -1, 24.9, TEAMS.b.color);     // south-east, by the Root Cellar spawn
+
 /* bomb sites: freshly dug plots ringed with straw, a big chalk letter in each */
 SITES.forEach(site => {
   const tex = canvasTex(256, 256, (g, W, H) => {
@@ -1318,10 +1372,11 @@ for (let k = 0; k < 14; k++){
   }
 }
 instanced(sproutGeo, lam(0xffffff, { vertexColors:true }), SPROUTS, false, null, false);
+instanced(new THREE.BoxGeometry(1, 1, 1), mapMat(HAY_C, 0.6, 0.6), LOOK_STEPS, true);
 
 /* pickup spots: floor, the seedling tray, the hay bale top and the crouch-jump crate */
 const PICKUP_SPOTS = [
-  [0, 4.7, -2.6], [-12, 1.55, -2], [-16, 0, 5], [-6, 0, -12], [6, 0, -12], [-8, 0, 21], [24.5, 1.95, -20.5], [17.2, 2.4, 19], [26, 0, 8], [0, 0, 24], [-26, 0, -19]
+  [0, 4.7, -2.6], [-12, 1.55, -2], [-16, 0, 5], [-6, 0, -12], [6, 0, -12], [-8, 0, 21], [24.5, 1.95, -20.5], [17.2, 2.4, 19], [26, 0, 8], [0, 0, 24], [-26, 0, -19], [-34.5, 6, -23], [34.5, 6, 23]
 ];
 
 /* ---------- collision helpers ---------- */
@@ -1870,8 +1925,10 @@ function makePlate(text, color){
   return sp;
 }
 const RING_GEO = new THREE.RingGeometry(0.66, 0.84, 32);
+const RING_MATS = {};
 function makeTeamRing(color){
-  const m = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0.9, side:THREE.DoubleSide, depthWrite:false }));
+  const mat = RING_MATS[color] || (RING_MATS[color] = new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0.9, side:THREE.DoubleSide, depthWrite:false }));
+  const m = new THREE.Mesh(RING_GEO, mat);
   m.rotation.x = -Math.PI/2; m.position.y = 0.035; m.renderOrder = 2;
   return m;
 }
@@ -1881,14 +1938,20 @@ const hazardTex = canvasTex(128, 192, (c, W, H) => {
   c.fillStyle = '#FFFFFF'; c.fillRect(8, 58, W - 16, 76);
   c.fillStyle = '#2B1238'; c.font = 'bold 27px "Trebuchet MS", Arial'; c.textAlign = 'center'; c.fillText('JUICE', W/2, 92); c.fillText('BOMB', W/2, 122);
 });
+let BOMB_PARTS = null;
 function makeBombMesh(){
+  const P = BOMB_PARTS || (BOMB_PARTS = (() => {
+    const side = new THREE.MeshLambertMaterial({ color:0xE8344E }), face = new THREE.MeshLambertMaterial({ map:hazardTex });
+    return { box:new THREE.BoxGeometry(0.5, 0.75, 0.32), boxMats:[side, side, WHITE_M, side, face, face],
+             straw:new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8), strawMat:new THREE.MeshLambertMaterial({ map:stripeTex('#E8344E') }),
+             light:new THREE.SphereGeometry(0.07, 12, 8), lightMat:new THREE.MeshBasicMaterial({ color:0xFF2244 }) };
+  })());
   const g = new THREE.Group();
-  const side = new THREE.MeshLambertMaterial({ color:0xE8344E }), face = new THREE.MeshLambertMaterial({ map:hazardTex });
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.75, 0.32), [side, side, WHITE_M, side, face, face]);
+  const box = new THREE.Mesh(P.box, P.boxMats);
   box.position.y = 0.375; box.castShadow = true; g.add(box);
-  const straw = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8), new THREE.MeshLambertMaterial({ map:stripeTex('#E8344E') }));
+  const straw = new THREE.Mesh(P.straw, P.strawMat);
   straw.position.set(0.1, 0.95, 0); straw.rotation.z = -0.3; g.add(straw);
-  const light = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), new THREE.MeshBasicMaterial({ color:0xFF2244 }));
+  const light = new THREE.Mesh(P.light, P.lightMat);
   light.position.set(-0.12, 0.8, 0); g.add(light);
   g.userData.light = light;
   return g;
@@ -3016,7 +3079,7 @@ function spawnEnemy(boss, x, z){
     } while (tries < 30 && (solidAt(x, 0.6, z) || Math.hypot(x - player.pos.x, z - player.pos.z) < 15));
   }
   const s = (boss ? 2.1 : rand(0.92, 1.08)) * (f.mods.size || 1);
-  const mesh = makeDroplet(f, s); scene.add(mesh);
+  const mesh = compactModel(makeDroplet(f, s)); scene.add(mesh);
   const hp = boss ? 520 + S.wave*30 : 55 + S.wave*7;
   const e = { f, mesh, s, boss, pos:new THREE.Vector3(x, 0, z), vel:new THREE.Vector3(), vy:0, onGround:true,
     hp, maxHp:hp, fireT:rand(1.4, 2.6), think:0, dirX:0, dirZ:0, strafe:Math.random() < 0.5 ? -1 : 1,
@@ -3111,7 +3174,7 @@ function updateEnemies(dt, active){
 }
 
 function killEnemy(e){
-  e.dead = true; scene.remove(e.mesh);
+  e.dead = true; scene.remove(e.mesh); disposeModel(e.mesh);
   voiceDeath(e.f, e.pos.x, e.pos.z, false);
   const s = e.s, y = e.pos.y + 0.6*s;
   addParticles(e.pos.x, y, e.pos.z, e.f.c3, e.boss ? 90 : 40, e.boss ? 10 : 7, e.boss ? 0.2 : 0.13);
@@ -3126,7 +3189,7 @@ function killEnemy(e){
     if (e.boss) spawnPickup('sugar', e.pos.x + 1.2, groundAt(e.pos.x + 1.2, e.pos.z, 0.1, e.pos.y + 0.3), e.pos.z);
   }
 }
-function clearEnemies(){ for (const e of ENEMIES) scene.remove(e.mesh); ENEMIES.length = 0; }
+function clearEnemies(){ for (const e of ENEMIES){ scene.remove(e.mesh); if (!e.dead) disposeModel(e.mesh); } ENEMIES.length = 0; }
 
 /* ---------- pickups ---------- */
 const PICKUPS = [];
@@ -3214,6 +3277,59 @@ function isFoe(a, b){ return a !== b && canHit(a.team, b.team); }
 function fighterById(id){ return id === player.id ? player : FIGHTERS.find(f => f.id === id) || null; }
 function nameOf(id){ const f = fighterById(id); return f ? (f === player ? 'You' : f.name) : 'Someone'; }
 
+/* Twelve fighters on screen is a lot of draw calls for a phone. In each model, the small fixed parts that
+   share a material and a parent (eyes, brows, leaves, straw pieces) are glued into one mesh, and parts too
+   small to show in a shadow stop casting one. Geometry is counted per model, so whatever only a departed
+   fighter or enemy used is freed from graphics memory (phones reload the page when that runs out). */
+const GEO_REFS = new Map();
+function compactModel(root){
+  const ud = root.userData || {}, keep = new Set([ud.body, ud.box, ud.pivot].filter(Boolean)), groups = new Map(), wsc = new THREE.Vector3();
+  root.updateMatrixWorld(true);
+  root.traverse(o => {
+    if (!o.isMesh || keep.has(o) || o.isInstancedMesh || o.isSkinnedMesh || o.children.length || !o.visible || o.renderOrder || Array.isArray(o.material)) return;
+    const g = o.geometry;
+    if (!g || !g.isBufferGeometry || !g.attributes.position || Object.keys(g.morphAttributes).length) return;
+    if (!g.boundingSphere) g.computeBoundingSphere();
+    o.getWorldScale(wsc);
+    if (o.castShadow && g.boundingSphere.radius*Math.max(Math.abs(wsc.x), Math.abs(wsc.y), Math.abs(wsc.z)) < 0.07) o.castShadow = false;
+    o.updateMatrix();
+    if (o.matrix.determinant() <= 0) return;          // a mirrored part would turn inside out once baked in
+    const names = Object.keys(g.attributes).sort();
+    if (names.some(n => g.attributes[n].isInterleavedBufferAttribute || g.attributes[n].normalized)) return;
+    const key = o.parent.uuid + '|' + o.material.uuid + '|' + (+o.castShadow) + (+o.receiveShadow) + '|' + names.map(n => n + g.attributes[n].itemSize).join(',');
+    const list = groups.get(key); if (list) list.push(o); else groups.set(key, [o]);
+  });
+  groups.forEach(list => {
+    if (list.length < 2) return;
+    const parts = list.map(o => { const q = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); q.applyMatrix4(o.matrix); return q; });
+    let total = 0; parts.forEach(q => { total += q.attributes.position.count; });
+    const geo = new THREE.BufferGeometry();
+    for (const name of Object.keys(parts[0].attributes)){
+      const size = parts[0].attributes[name].itemSize, arr = new Float32Array(total*size); let off = 0;
+      for (const q of parts){ const a = q.attributes[name], n = a.count*size; arr.set(a.array.subarray(0, n), off); off += n; }
+      geo.setAttribute(name, new THREE.BufferAttribute(arr, size));
+    }
+    parts.forEach(q => q.dispose());
+    geo.computeBoundingSphere();
+    const first = list[0], m = new THREE.Mesh(geo, first.material);
+    m.castShadow = first.castShadow; m.receiveShadow = first.receiveShadow;
+    first.parent.add(m);
+    list.forEach(o => o.parent.remove(o));
+  });
+  root.traverse(o => { if (o.isMesh && o.geometry) GEO_REFS.set(o.geometry, (GEO_REFS.get(o.geometry) || 0) + 1); });
+  return root;
+}
+function disposeModel(root){
+  if (!root) return;
+  root.traverse(o => {
+    if (o.isMesh && o.geometry && GEO_REFS.has(o.geometry)){
+      const n = GEO_REFS.get(o.geometry) - 1;
+      if (n > 0) GEO_REFS.set(o.geometry, n); else { GEO_REFS.delete(o.geometry); o.geometry.dispose(); }
+    }
+    if (o.isSprite && o.material){ if (o.material.map) o.material.map.dispose(); o.material.dispose(); }   // name plates are one of a kind
+  });
+}
+
 function makeFighter(o){
   const fr = Object.assign({
     pos:new THREE.Vector3(), vel:new THREE.Vector3(), vy:0, face:0, yaw:0, hp:100, maxHp:100, alive:true,
@@ -3226,24 +3342,26 @@ function makeFighter(o){
   return fr;
 }
 function buildFighterMesh(fr){
-  if (fr.mesh) scene.remove(fr.mesh);
-  fr.mesh = makeDroplet(fr.f, fr.f.mods.size || 1); scene.add(fr.mesh);
+  if (fr.mesh){ scene.remove(fr.mesh); disposeModel(fr.mesh); }
+  fr.mesh = compactModel(makeDroplet(fr.f, fr.f.mods.size || 1)); scene.add(fr.mesh);
   fr.plate = makePlate(fr.name, fr.team ? TEAMS[fr.team].color : '#FFFFFF'); fr.plate.position.y = (fr.mesh.userData.top || 2) + 0.35; fr.plate.scale.multiplyScalar(1/(fr.f.mods.size || 1)); fr.mesh.add(fr.plate);
   fr.ring = fr.team ? makeTeamRing(TEAMS[fr.team].color) : null; if (fr.ring) fr.mesh.add(fr.ring);
   fr.bombMesh = makeBombMesh(); fr.bombMesh.scale.setScalar(0.45); fr.bombMesh.position.set(0, 0.55, -0.6); fr.bombMesh.visible = false; fr.mesh.add(fr.bombMesh);
   fr.look = { f:fr.f.id, team:fr.team, name:fr.name };
 }
-function removeFighter(fr){ scene.remove(fr.mesh); const i = FIGHTERS.indexOf(fr); if (i >= 0) FIGHTERS.splice(i, 1); }
+function removeFighter(fr){ scene.remove(fr.mesh); disposeModel(fr.mesh); const i = FIGHTERS.indexOf(fr); if (i >= 0) FIGHTERS.splice(i, 1); }
 function clearFighters(){ while (FIGHTERS.length) removeFighter(FIGHTERS[0]); }
 
 function hitFighter(f, dmg, info){
   if (info.own === player.id){
-    hitMarker(info.tip); hitDing(dmg, info.tip);
+    hitMarker(info.tip);
+    if (typeof hitDing === 'function') hitDing(dmg, info.tip); else SFX.play(info.tip ? 'tip' : 'hit');
     if (info.shot >= 0 && info.shot !== lastHitShot){ S.hits++; lastHitShot = info.shot; }
   }
   f.flash = 0.09;
   if (f.kind === 'bot') damageBot(f, dmg, info);
-  else if (f.kind === 'remote' && info.own === player.id){ netHit(f.id, dmg, info); voiceHurt(f, f.f, f.pos.x, f.pos.z, false); }
+  else if ((f.kind === 'remote' || f.kind === 'hbot') && info.own === player.id){ netHit(f.id, dmg, info); if (typeof voiceHurt === 'function') voiceHurt(f, f.f, f.pos.x, f.pos.z, false); }
+  else if (f.kind === 'remote' && S.online && NET.host && FIGHTERS.some(b => b.kind === 'bot' && b.id === info.own)) netBotHit(f.id, dmg, info, info.own);
 }
 function damageBot(b, dmg, info){
   if (!b.alive) return;
@@ -3251,14 +3369,15 @@ function damageBot(b, dmg, info){
   const a = fighterById(info.own);
   if (a && a.alive && !b.target) { b.target = a; b.react = 0.2; }
   if (b.hp <= 0){ botDie(b, info.own, info.wi); return; }
-  voiceHurt(b, b.f, b.pos.x, b.pos.z, false);
+  if (typeof voiceHurt === 'function') voiceHurt(b, b.f, b.pos.x, b.pos.z, false);
 }
 function botDie(b, killerId, wi){
   b.alive = false; b.d++; b.deadT = 0; b.hp = 0; b.mesh.visible = false; b.useT = 0;
-  voiceDeath(b.f, b.pos.x, b.pos.z, false);
+  if (typeof voiceDeath === 'function') voiceDeath(b.f, b.pos.x, b.pos.z, false);
   addParticles(b.pos.x, b.pos.y + 0.6, b.pos.z, b.f.c3, 40, 7, 0.13);
   addStain(b.pos.x, b.pos.y, b.pos.z, b.f.c3, 1.25);
   SFX.play('pop', clamp(1.2 - Math.hypot(b.pos.x - player.pos.x, b.pos.z - player.pos.z)/40, 0.25, 1));
+  if (S.online && NET.host && NET.game) netPush(['K', b.id, killerId || '', wi | 0]);
   onDeath(b, killerId, wi);
 }
 function onDeath(v, killerId, wi){
@@ -3302,6 +3421,36 @@ function addBots(n, team, startIdx){
     b.bw = pick([0, 0, 1, 1, 2]); b.wi = [0, 1, 2][b.bw]; b.strafe = Math.random() < 0.5 ? 1 : -1;
     respawnBot(b);
   }
+}
+
+let botSeq = 0;
+const TEAM_SIZE = 6, FFA_SIZE = 8;
+function addBot(team){
+  const used = new Set([S.flavor.id].concat(FIGHTERS.map(f => f.f.id)));
+  const f = pick(FLAVORS.filter(x => !used.has(x.id))) || pick(FLAVORS), n = botSeq++;
+  const b = makeFighter({ id:'b' + n, kind:'bot', name:BOT_NAMES[n % BOT_NAMES.length], f, team });
+  b.bw = pick([0, 0, 1, 1, 2]); b.wi = [0, 1, 2][b.bw]; b.strafe = Math.random() < 0.5 ? 1 : -1;
+  respawnBot(b);
+  return b;
+}
+// bots fill the empty places: 6 a side in Juice Bomb, 8 fighters in Splat Fest (online, only while the host has bots on)
+function syncBots(mode){
+  if (!isAuthority()) return;
+  const fill = !S.online || NET.botFill;
+  const humans = [player].concat(FIGHTERS.filter(f => f.kind === 'remote'));
+  const want = {};
+  if (mode === 'ffa') want.ffa = fill ? Math.max(0, FFA_SIZE - humans.length) : 0;
+  else ['a', 'b'].forEach(t => { want[t] = fill ? Math.max(0, TEAM_SIZE - humans.filter(h => h.team === t).length) : 0; });
+  FIGHTERS.filter(f => f.kind === 'bot' && !((f.team || 'ffa') in want)).forEach(removeFighter);
+  Object.keys(want).forEach(key => {
+    const team = key === 'ffa' ? null : key, mine = FIGHTERS.filter(f => f.kind === 'bot' && (f.team || 'ffa') === key);
+    for (let i = mine.length; i < want[key]; i++) addBot(team);
+    if (mine.length > want[key]){
+      const carrier = MV && MV.bomb ? MV.bomb.by : null;
+      mine.sort((x, y) => (x.alive - y.alive) || ((x.id === carrier) - (y.id === carrier)));
+      mine.slice(0, mine.length - want[key]).forEach(removeFighter);
+    }
+  });
 }
 
 /* ---------- bots ---------- */
@@ -3354,6 +3503,10 @@ function botFire(b, t){
     dirV.normalize(); dirV.y += 0.5*W.grav*tt/W.speed;
     originV.set(ox, oy, oz);
     spawnProj(originV, dirV, W.speed, { own:b.id, team:b.team, auth:true, wi:b.wi, dmg:W.dmg, c:b.f.c3, r:W.r, grav:W.grav, f:b.f });
+  }
+  if (S.online && NET.host && NET.game){
+    const d = new THREE.Vector3(tx - ox, ty - oy, tz - oz).normalize(); d.y += 0.5*W.grav*tt/W.speed;
+    netPushFx(['F', b.id, b.bw | 0, r2(ox), r2(oy), r2(oz), r3(d.x), r3(d.y), r3(d.z)]);
   }
   b.kick = 1;
   SFX.play(b.bw === 2 ? 'bigsquirt' : 'squirt', clamp(1 - Math.hypot(b.pos.x - player.pos.x, b.pos.z - player.pos.z)/38, 0.1, 0.7));
@@ -3446,7 +3599,7 @@ function drawFighters(dt){
   const checkLos = plateClock <= 0; if (checkLos) plateClock = 0.2;
   for (const fr of FIGHTERS){
     const m = fr.mesh, ud = m.userData;
-    if (fr.kind === 'remote'){
+    if (fr.kind === 'remote' || fr.kind === 'hbot'){
       const k = 1 - Math.exp(-16*dt);
       fr.pos.lerp(fr.tp, k);
       let da = fr.tface - fr.face; da = Math.atan2(Math.sin(da), Math.cos(da)); fr.face += da*k;
@@ -3507,11 +3660,13 @@ function aliveOn(team){ return everyone().filter(f => f.alive && f.team === team
 function onTeam(team){ return everyone().filter(f => f.team === team); }
 
 function startMatch(mode){
+  syncBots(mode);
   M = newMatchState(mode); MV = M; lastRid = -1; lastPhase = ''; lastBomb = '';
   if (mode === 'bomb') nextRound();
   else { M.phase = 'live'; M.t = FFA.time; M.rid = 1; }
 }
 function nextRound(){
+  syncBots('bomb');
   M.round++; M.rid++;
   M.att = M.round <= BOMB.half ? 'a' : 'b';
   M.phase = 'freeze'; M.t = BOMB.freeze; M.winTeam = null; M.reason = '';
@@ -3667,12 +3822,35 @@ function updateUse(dt){
    Peer-to-peer lobbies for the standalone build.
    The host's browser is the hub: everyone else connects to it
    with the lobby code, sends their state there, and the hub
-   passes everyone's changes on. Same calls as the room API the
-   game was written against, so the rest of the netcode is shared.
+   passes everyone's changes on, batched every 50 ms. Same calls
+   as the room API the game was written against, so the rest of
+   the netcode is shared.
+   Connections try a direct route first, then relay (TURN)
+   servers on ports 80 and 443, which get through phone data,
+   VPNs (Opera's included) and most school or work Wi-Fi.
    ========================================================= */
-const P2P_PREFIX = 'veggieblammers-1942-';
+const P2P_PREFIX = 'veggieblammers-1942-v2-';
 const P2P_OPTS = Object.assign({ debug:0 }, window.P2P_OPTS_OVERRIDE || {});
-const P2P_SILENCE = window.P2P_SILENCE || 15000;   // how long a quiet host counts as gone
+const P2P_SILENCE = window.P2P_SILENCE || 15000;   // a quiet link counts as dropped after this
+const P2P_AWAY = 120000;                            // ...or this long when that page said it went into the background
+const P2P_MAX = 8;                                  // people per lobby, host included
+const OPEN_RELAY = { host:'staticauth.openrelay.metered.ca', secret:'openrelayprojectsecret' };
+async function p2pIceServers(){
+  const list = [{ urls:'stun:stun.l.google.com:19302' },
+                { urls:['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username:'peerjs', credential:'peerjsp' }];
+  try {
+    // the free Open Relay servers take time-limited credentials signed with their published secret
+    if (window.crypto && crypto.subtle && window.TextEncoder){
+      const user = (Math.floor(Date.now()/1000) + 12*3600) + ':blammers', enc = new TextEncoder();
+      const key = await crypto.subtle.importKey('raw', enc.encode(OPEN_RELAY.secret), { name:'HMAC', hash:'SHA-1' }, false, ['sign']);
+      const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(user)));
+      let bin = ''; for (let i = 0; i < sig.length; i++) bin += String.fromCharCode(sig[i]);
+      const h = OPEN_RELAY.host;
+      list.push({ urls:['turn:' + h + ':80', 'turn:' + h + ':443?transport=tcp', 'turns:' + h + ':443?transport=tcp'], username:user, credential:btoa(bin) });
+    }
+  } catch (e) {}
+  return list;
+}
 function makeP2PRoom(){
   if (typeof Peer === 'undefined') return null;
   return {
@@ -3682,10 +3860,13 @@ function makeP2PRoom(){
   };
 }
 function joinP2P(name, asHub){
-  return new Promise((resolve, reject) => {
+  return p2pIceServers().then(ice => new Promise((resolve, reject) => {
     const R = { me:null, peer:null, hubConn:null, conns:new Map(), map:new Map(), mine:{}, sent:{}, listeners:new Set(), connL:new Set(),
-                open:false, dead:false, queued:false, flushT:0, snapshot:Object.freeze([]), heard:performance.now(), beat:0 };
+                open:false, dead:false, queued:false, flushT:0, outT:0, out:new Map(), snapshot:Object.freeze([]), heard:performance.now(), beat:0,
+                tick:0, away:false, hubAway:0, closedBy:null, retryT:0 };
     const hubId = P2P_PREFIX + name;
+    const opts = Object.assign({}, P2P_OPTS);
+    if (!opts.config) opts.config = { iceServers:ice, sdpSemantics:'unified-plan' };
     const snap = () => {
       const arr = [];
       if (R.me) arr.push(Object.freeze({ peer:R.me, by:null, isMe:true, sameTab:true, kind:'viewer', guest:false, presence:R.mine, updatedAt:Date.now() }));
@@ -3703,15 +3884,26 @@ function joinP2P(name, asHub){
       R.map.set(id, { presence:next, at:Date.now() }); notify();
     };
     const sendAll = (msg, except) => { R.conns.forEach((c, id) => { if (id !== except && c.open){ try { c.send(msg); } catch (e) {} } }); };
+    // the hub merges everyone's changes and sends them on in one message per 50 ms
+    const sendOut = () => {
+      R.outT = 0; if (!R.out.size) return;
+      const items = []; R.out.forEach((patch, id) => items.push([id, patch])); R.out.clear();
+      R.conns.forEach((c, id) => { if (!c.open) return; const mine = items.filter(it => it[0] !== id); if (mine.length){ try { c.send({ t:'pb', items:mine }); } catch (e) {} } });
+    };
+    const queueOut = (id, patch) => {
+      const cur = R.out.get(id); R.out.set(id, Object.assign(cur || {}, patch));
+      if (!R.outT) R.outT = setTimeout(sendOut, 50);
+    };
     const flush = () => {
       R.flushT = 0;
       const patch = {}; let any = false;
       for (const k in R.mine){ const j = JSON.stringify(R.mine[k]); if (R.sent[k] !== j){ R.sent[k] = j; patch[k] = R.mine[k]; any = true; } }
       for (const k in R.sent){ if (!(k in R.mine)){ delete R.sent[k]; patch[k] = null; any = true; } }
       if (!any) return;
-      if (asHub) sendAll({ t:'p', peer:R.me, patch });
+      if (asHub) queueOut(R.me, patch);
       else if (R.hubConn && R.hubConn.open){ try { R.hubConn.send({ t:'p', patch }); } catch (e) {} }
     };
+    const toHub = msg => { if (R.hubConn && R.hubConn.open){ try { R.hubConn.send(msg); } catch (e) {} } };
     const api = {
       name, isHub:asHub,
       emit: async () => {}, on: () => () => {},
@@ -3719,24 +3911,32 @@ function joinP2P(name, asHub){
         const next = Object.assign({}, R.mine);
         for (const k in patch){ if (patch[k] === null) delete next[k]; else next[k] = patch[k]; }
         R.mine = next; snap();
-        if (!R.flushT) R.flushT = setTimeout(flush, 40);
+        if (!R.flushT) R.flushT = setTimeout(flush, 50);
       },
       peers: () => R.snapshot,
       onPeers: fn => { R.listeners.add(fn); setTimeout(() => fn({ peers:R.snapshot, joined:R.snapshot, left:[], updated:[] }), 0); return () => R.listeners.delete(fn); },
       connected: () => R.open,
+      hostAway: () => !asHub && R.hubAway > performance.now(),
+      closedBy: () => R.closedBy,
       onConnection: fn => { R.connL.add(fn); setTimeout(() => fn(R.open), 0); return () => R.connL.delete(fn); },
-      leave: async () => { R.dead = true; clearTimeout(R.flushT); clearInterval(R.beat); try { R.peer && R.peer.destroy(); } catch (e) {} setOpen(false); },
+      leave: async () => { bye(); cleanup(); setOpen(false); },
     };
     let settled = false;
-    const timer = setTimeout(() => fail('upstream_error'), 15000);
-    function fail(code){ if (settled) return; settled = true; clearTimeout(timer); clearInterval(R.beat); R.dead = true; try { R.peer && R.peer.destroy(); } catch (e) {} reject({ code }); }
+    const timer = setTimeout(() => fail(asHub ? 'upstream_error' : 'no_route'), 20000);
+    function cleanup(){
+      R.dead = true; clearTimeout(R.flushT); clearTimeout(R.outT); clearTimeout(R.retryT); clearInterval(R.beat);
+      removeEventListener('pagehide', bye); document.removeEventListener('visibilitychange', onVis);
+      try { R.peer && R.peer.destroy(); } catch (e) {}
+    }
+    function fail(code){ if (settled) return; settled = true; clearTimeout(timer); cleanup(); reject({ code }); }
     function ok(){ if (settled) return; settled = true; clearTimeout(timer); resolve(api); }
     let peer;
-    try { peer = R.peer = asHub ? new Peer(hubId, P2P_OPTS) : new Peer(P2P_OPTS); }
+    try { peer = R.peer = asHub ? new Peer(hubId, opts) : new Peer(opts); }
     catch (e){ fail('not_permitted'); return; }
     peer.on('error', err => {
       const t = err && err.type;
       if (!settled) fail(t === 'unavailable-id' ? 'code_taken' : t === 'peer-unavailable' ? 'not_found' : t === 'browser-incompatible' ? 'not_permitted' : 'upstream_error');
+      else if (!asHub && t === 'peer-unavailable' && !R.open){ R.unavail = (R.unavail || 0) + 1; if (R.unavail >= 6 && !(R.hubAway > performance.now())) R.closedBy = 'gone'; }
     });
     peer.on('disconnected', () => { if (!R.dead){ try { peer.reconnect(); } catch (e) {} } });
     R.beat = setInterval(() => {
@@ -3746,55 +3946,112 @@ function joinP2P(name, asHub){
       if (stalled){ R.heard = now; R.conns.forEach(c => { c._heard = now; }); return; }   // this tab was frozen: give everyone a fresh grace period
       if (asHub){
         sendAll({ t:'hb' });
-        R.conns.forEach((c, id) => { if (now - (c._heard || now) > P2P_SILENCE + 5000){ try { c.close(); } catch (e) {} R.conns.delete(id); R.map.delete(id); notify(); sendAll({ t:'left', peer:id }); } });
+        R.conns.forEach((c, id) => { if (now - (c._heard || now) > (c._away ? P2P_AWAY : P2P_SILENCE + 5000)){ try { c.close(); } catch (e) {} R.conns.delete(id); R.map.delete(id); notify(); sendAll({ t:'left', peer:id }); } });
       } else if (R.hubConn && R.hubConn.open){
-        try { R.hubConn.send({ t:'hb' }); } catch (e) {}
-        if (R.open && now - R.heard > P2P_SILENCE){ R.map.clear(); notify(); setOpen(false); }
+        toHub({ t:'hb' });
+        if (R.open && now - R.heard > (R.hubAway > now ? P2P_AWAY : P2P_SILENCE)){ setOpen(false); try { R.hubConn.close(); } catch (e) {} retry(); }
       }
     }, 1000);
-    const bye = () => {
+    function bye(){
       if (R.dead) return;
-      if (asHub) sendAll({ t:'bye' }); else if (R.hubConn && R.hubConn.open){ try { R.hubConn.send({ t:'bye' }); } catch (e) {} }
-    };
+      if (asHub) sendAll({ t:'bye' }); else toHub({ t:'bye' });
+    }
+    // phones pause pages in the background: say so, so nobody gives up on us, and reconnect when we are back
+    function onVis(){
+      if (R.dead) return;
+      const hidden = document.visibilityState === 'hidden';
+      R.away = hidden;
+      if (asHub) sendAll({ t:hidden ? 'away' : 'back' }); else toHub({ t:hidden ? 'away' : 'back' });
+      if (!hidden){
+        const now = performance.now(); R.tick = now; R.heard = now; R.conns.forEach(c => { c._heard = now; });
+        if (peer.disconnected){ try { peer.reconnect(); } catch (e) {} }
+        if (!asHub && settled && (!R.hubConn || !R.hubConn.open)) retry();
+      }
+    }
     addEventListener('pagehide', bye);
+    document.addEventListener('visibilitychange', onVis);
+    // client: (re)connect to the hub; a dropped link retries every couple of seconds
+    function connect(){
+      if (R.dead || R.closedBy) return;
+      if (R.hubConn){ try { R.hubConn.close(); } catch (e) {} }
+      const conn = R.hubConn = peer.connect(hubId, { reliable:true, serialization:'json' });
+      let opened = false;
+      const openT = setTimeout(() => { if (opened || R.hubConn !== conn) return; try { conn.close(); } catch (e) {} if (!settled) fail('no_route'); else retry(); }, 15000);
+      const watchIce = n => {
+        const pc = conn.peerConnection;
+        if (!pc){ if (n < 50 && !opened) setTimeout(() => watchIce(n + 1), 200); return; }
+        pc.addEventListener('iceconnectionstatechange', () => {
+          if (pc.iceConnectionState === 'failed' && R.hubConn === conn && !opened){ clearTimeout(openT); try { conn.close(); } catch (e) {} if (!settled) fail('no_route'); else retry(); }
+        });
+      };
+      watchIce(0);
+      conn.on('open', () => {
+        opened = true; clearTimeout(openT);
+        if (R.hubConn !== conn) return;
+        R.heard = performance.now(); R.unavail = 0; R.sent = {}; flush();
+        if (R.away) toHub({ t:'away' });
+        if (settled) setOpen(true);
+      });
+      conn.on('data', msg => {
+        if (R.hubConn !== conn) return;
+        R.heard = performance.now();
+        if (!msg || typeof msg !== 'object') return;
+        if (msg.t === 'snap' && msg.peers && typeof msg.peers === 'object'){
+          R.map.clear(); Object.keys(msg.peers).forEach(k => { if (k !== R.me) R.map.set(k, { presence:msg.peers[k] || {}, at:Date.now() }); }); notify();
+          setOpen(true); ok();
+        } else if (msg.t === 'pb' && Array.isArray(msg.items)){
+          msg.items.forEach(it => { if (Array.isArray(it) && it[0] !== R.me && it[1] && typeof it[1] === 'object') applyPatch(it[0], it[1]); });
+        } else if (msg.t === 'p' && msg.peer && msg.peer !== R.me) applyPatch(msg.peer, msg.patch || {});
+        else if (msg.t === 'left'){ R.map.delete(msg.peer); notify(); }
+        else if (msg.t === 'away') R.hubAway = performance.now() + P2P_AWAY;
+        else if (msg.t === 'back') R.hubAway = 0;
+        else if (msg.t === 'full'){ R.closedBy = 'full'; if (!settled) fail('full'); }
+        else if (msg.t === 'bye'){ R.closedBy = 'host'; R.map.clear(); notify(); setOpen(false); }
+      });
+      conn.on('close', () => { clearTimeout(openT); if (R.hubConn !== conn) return; setOpen(false); if (settled && !R.closedBy) retry(); });
+      conn.on('error', () => { if (!opened && !settled){ clearTimeout(openT); fail('no_route'); } });
+    }
+    function retry(){
+      if (asHub || R.dead || R.closedBy || R.retryT) return;
+      R.retryT = setTimeout(() => {
+        R.retryT = 0;
+        if (R.dead || R.closedBy || R.open) return;
+        if (peer.disconnected){ try { peer.reconnect(); } catch (e) {} }
+        connect();
+      }, 2000);
+    }
     peer.on('open', id => {
-      R.me = id; snap();
+      const first = !R.me; R.me = id; snap();
+      if (!first) return;
       if (asHub){
         setOpen(true); ok();
         peer.on('connection', conn => {
-          const gone = () => { if (!R.conns.has(conn.peer)) return; R.conns.delete(conn.peer); R.map.delete(conn.peer); notify(); sendAll({ t:'left', peer:conn.peer }); };
+          const gone = () => { if (R.conns.get(conn.peer) !== conn) return; R.conns.delete(conn.peer); R.map.delete(conn.peer); R.out.delete(conn.peer); notify(); sendAll({ t:'left', peer:conn.peer }); };
           conn.on('close', gone); conn.on('error', gone);
           conn.on('open', () => {
-            conn._heard = performance.now();
+            const old = R.conns.get(conn.peer);   // the same player coming back replaces their old link
+            if (!old && R.conns.size >= P2P_MAX - 1){ try { conn.send({ t:'full' }); } catch (e) {} setTimeout(() => { try { conn.close(); } catch (e) {} }, 500); return; }
+            if (old && old !== conn){ R.conns.delete(conn.peer); try { old.close(); } catch (e) {} }
+            conn._heard = performance.now(); conn._away = false;
             R.conns.set(conn.peer, conn);
             const all = {}; all[R.me] = R.mine; R.map.forEach((v, k) => { all[k] = v.presence; });
             try { conn.send({ t:'snap', peers:all }); } catch (e) {}
+            if (R.away){ try { conn.send({ t:'away' }); } catch (e) {} }
           });
           conn.on('data', msg => {
             conn._heard = performance.now();
-            if (msg && msg.t === 'bye'){ gone(); return; }
-            if (!msg || typeof msg !== 'object' || msg.t !== 'p' || !msg.patch || typeof msg.patch !== 'object') return;
+            if (!msg || typeof msg !== 'object' || R.conns.get(conn.peer) !== conn) return;
+            if (msg.t === 'bye'){ gone(); return; }
+            if (msg.t === 'away'){ conn._away = true; return; }
+            if (msg.t === 'back'){ conn._away = false; return; }
+            if (msg.t !== 'p' || !msg.patch || typeof msg.patch !== 'object') return;
             applyPatch(conn.peer, msg.patch);
-            sendAll({ t:'p', peer:conn.peer, patch:msg.patch }, conn.peer);
+            queueOut(conn.peer, msg.patch);
           });
         });
-      } else {
-        const conn = R.hubConn = peer.connect(hubId, { reliable:true, serialization:'json' });
-        conn.on('open', () => { R.heard = performance.now(); setOpen(true); R.sent = {}; flush(); ok(); });
-        conn.on('data', msg => {
-          R.heard = performance.now();
-          if (!msg || typeof msg !== 'object') return;
-          if (msg.t === 'snap' && msg.peers && typeof msg.peers === 'object'){
-            Object.keys(msg.peers).forEach(k => { if (k !== R.me) R.map.set(k, { presence:msg.peers[k] || {}, at:Date.now() }); }); notify();
-          } else if (msg.t === 'p' && msg.peer && msg.peer !== R.me) applyPatch(msg.peer, msg.patch || {});
-          else if (msg.t === 'left'){ R.map.delete(msg.peer); notify(); }
-          else if (msg.t === 'bye'){ R.map.clear(); notify(); setOpen(false); }
-        });
-        conn.on('close', () => { R.map.clear(); notify(); setOpen(false); });
-        conn.on('error', () => { if (!settled) fail('not_found'); });
-      }
+      } else connect();
     });
-  });
+  }));
 }
 
 /* =========================================================
@@ -3804,7 +4061,9 @@ function joinP2P(name, asHub){
    numbered events; the host also shares the match state.
    ========================================================= */
 const NET = { room:null, game:null, code:null, host:false, me:null, seq:0, ev:[], seen:{}, lastG:null, joinedAt:0,
-              mode:'bomb', nick:'', advT:0, advKey:'', leftNote:{} };
+              mode:'bomb', nick:'', advT:0, advKey:'', leftNote:{},
+              fx:[], fxSeq:0, seenFx:{}, botFill:store('jbb-bots') !== '0', hostBotFill:true, joinWall:0, lastHumans:-1, hostSeenAt:0 };
+const NET_MAX = 8;
 function isAuthority(){ return !S.online || NET.host; }
 const GAME_URL = location.href.split('#')[0];
 const inviteLink = code => GAME_URL + '#join-' + code;
@@ -3893,8 +4152,10 @@ async function enterGame(code, host){
     const c = e && e.code;
     if (c === 'code_taken' && host){ $('createBtn').disabled = $('joinBtn').disabled = false; return createLobby(); }
     if (NET.p2p){
-      setNetStatus(c === 'not_found' ? 'No lobby with code ' + code + ' right now. Check the code with whoever is hosting.'
-        : c === 'not_permitted' ? "This browser can't connect players directly. Try a current Chrome, Edge, Firefox or Safari."
+      setNetStatus(c === 'not_found' ? 'No lobby with code ' + code + ' right now. Check the code with whoever is hosting. If they are on a phone, the game has to stay open on their screen. If either of you had the game open from before, reload the page so you both have the latest version.'
+        : c === 'full' ? 'That lobby is full. Up to ' + NET_MAX + ' people can play in one lobby.'
+        : c === 'no_route' ? "Found the lobby but couldn't connect to the host. A VPN (Opera's built-in one counts) or a school or work network can block game connections. Turn the VPN off or try another network, then join again."
+        : c === 'not_permitted' ? "This browser can't connect players directly. Try a current Chrome, Edge, Firefox, Opera or Safari."
         : "Couldn't reach the matchmaking server. Check your connection and try again.", true);
       $('createBtn').disabled = $('joinBtn').disabled = false;
       return;
@@ -3904,7 +4165,7 @@ async function enterGame(code, host){
     $('createBtn').disabled = $('joinBtn').disabled = false;
     return;
   }
-  Object.assign(NET, { game:g, code, host, me:null, seq:0, ev:[], seen:{}, lastG:null, joinedAt:S.time, joinedAtMs:performance.now(), lostAt:0, leftNote:{}, teamPicked:host });
+  Object.assign(NET, { game:g, code, host, me:null, seq:0, ev:[], seen:{}, fx:[], fxSeq:0, seenFx:{}, lastHumans:-1, hostSeenAt:S.time, joinWall:Date.now(), lastG:null, joinedAt:S.time, joinedAtMs:performance.now(), lostAt:0, leftNote:{}, teamPicked:host });
   S.online = true; clearFighters(); player.id = 'me'; player.k = player.d = 0; player.alive = false;
   const counts = { a:0, b:0 };
   g.peers().forEach(p => { const t = p.presence && p.presence.tm; if (t === 'a' || t === 'b') counts[t]++; });
@@ -3934,7 +4195,10 @@ function leaveLobby(){
 }
 
 /* ---------- my presence ---------- */
-function netPush(arr){ NET.seq++; NET.ev.push([NET.seq].concat(arr)); if (NET.ev.length > 12) NET.ev.shift(); }
+function netPush(arr){ NET.seq++; NET.ev.push([NET.seq].concat(arr)); if (NET.ev.length > 20) NET.ev.shift(); }
+// shots of the host's bots ride in their own short ring, so a busy fight never pushes hits or deaths out
+function netPushFx(arr){ NET.fxSeq++; NET.fx.push([NET.fxSeq].concat(arr)); if (NET.fx.length > 16) NET.fx.shift(); }
+function netBotHit(target, dmg, info, shooter){ netPush(['H', target, Math.round(dmg*10)/10, (info.tip ? 1 : 0) | (info.slow ? 2 : 0), info.wi | 0, shooter]); }
 function netFire(o, d, wi){ netPush(['f', wi, r2(o.x), r2(o.y), r2(o.z), r3(d.x), r3(d.y), r3(d.z)]); }
 function netHit(target, dmg, info){ netPush(['h', target, Math.round(dmg*10)/10, (info.tip ? 1 : 0) | (info.slow ? 2 : 0) | (info.melee ? 4 : 0) | (info.back ? 8 : 0), info.wi | 0]); }
 function netDeath(killer, wi){ netPush(['k', killer || '', wi | 0]); }
@@ -3951,17 +4215,48 @@ function unpackMatch(g){
 }
 function myPresence(){
   const p = player;
-  const o = { v:1, nm:NET.nick, fl:S.flavor.id, tm:p.team || '', h:NET.host ? 1 : 0,
+  const o = { v:1, nm:NET.nick, fl:S.flavor.id, tm:p.team || '', h:NET.host ? 1 : 0, j:NET.joinWall || 0,
               s:[r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r3(p.yaw), r3(p.pitch), p.ducked || p.duckT > 0.5 ? 1 : 0], w:p.weapon, hp:Math.round(p.hp), al:p.alive && S.mode !== 'lobby' ? 1 : 0,
-              k:p.k, d:p.d, e:NET.ev };
-  if (NET.host) o.g = packMatch(M);
+              k:p.k, d:p.d, e:NET.ev, fx:NET.fx };
+  if (NET.host){
+    o.g = packMatch(M); o.bf = NET.botFill ? 1 : 0;
+    const bots = FIGHTERS.filter(f => f.kind === 'bot');
+    if (bots.length) o.bt = bots.map(b => [b.id, b.name, b.f.id, b.team || '', r2(b.pos.x), r2(b.pos.y), r2(b.pos.z), r3(b.face), b.alive ? 1 : 0, Math.round(b.hp), b.k | 0, b.d | 0, b.bw | 0]);
+  }
+  if (!NET.p2p){
+    // a room keeps each presence under 4 KiB: in a very busy moment, drop the oldest bot shots (only for show), then the oldest events
+    let n = JSON.stringify(o).length;
+    while (n > 3800 && (o.fx.length || o.e.length > 6)){
+      const cut = Math.max(1, Math.ceil((n - 3800)/60));
+      if (o.fx.length) o.fx = o.fx.slice(Math.min(cut, o.fx.length)); else o.e = o.e.slice(Math.min(cut, o.e.length - 6));
+      n = JSON.stringify(o).length;
+    }
+  }
   return o;
+}
+// everyone but the host shows the host's bots from its presence
+function syncHostBots(list){
+  const seen = new Set();
+  (Array.isArray(list) ? list : []).forEach(a => {
+    if (!Array.isArray(a) || typeof a[0] !== 'string') return;
+    const id = a[0], team = a[3] === 'a' || a[3] === 'b' ? a[3] : null, fl = flavorById(a[2]), nm = cleanName(a[1]);
+    let b = FIGHTERS.find(f => f.id === id);
+    if (b && b.kind !== 'hbot') return;
+    seen.add(id);
+    if (!b){ b = makeFighter({ id, kind:'hbot', name:nm, f:fl, team }); b.pos.set(+a[4] || 0, +a[5] || 0, +a[6] || 0); b.tp.copy(b.pos); b.face = b.tface = +a[7] || 0; }
+    else if (b.look.f !== fl.id || b.look.team !== team || b.look.name !== nm){ b.f = fl; b.team = team; b.name = nm; buildFighterMesh(b); }
+    b.tp.set(+a[4] || 0, +a[5] || 0, +a[6] || 0); b.tface = +a[7] || 0;
+    const was = b.alive; b.alive = !!a[8]; if (!was && b.alive){ b.pos.copy(b.tp); b.face = b.tface; }
+    b.hp = a[9] | 0; b.k = a[10] | 0; b.d = a[11] | 0; b.bw = a[12] | 0;
+  });
+  for (const f of FIGHTERS.slice()) if (f.kind === 'hbot' && !seen.has(f.id)) removeFighter(f);
 }
 
 /* ---------- reading everyone else ---------- */
-function processEvents(fr, list){
+function processEvents(fr, list, fxRing){
   if (!Array.isArray(list)) return;
-  const last = NET.seen[fr.id] || 0; let max = last;
+  const seenMap = fxRing ? NET.seenFx : NET.seen;
+  const last = seenMap[fr.id] || 0; let max = last;
   for (const ev of list){
     if (!Array.isArray(ev) || !(ev[0] > last)) continue;
     max = Math.max(max, ev[0]);
@@ -3976,27 +4271,50 @@ function processEvents(fr, list){
       }
       fr.kick = 1;
       SFX.play(w.sound, clamp(1 - Math.hypot(o.x - player.pos.x, o.z - player.pos.z)/40, 0.1, 0.7));
-    } else if (type === 'h'){
-      const fl = ev[4] | 0;
-      if (ev[2] === NET.me && player.alive && canHit(fr.team, player.team)){
+    } else if (type === 'F'){
+      // one of the host's bots fired (for show: the host decides what it hits)
+      const b = FIGHTERS.find(x => x.id === ev[2]), W = BOTW[ev[3] | 0]; if (!b || !W) continue;
+      const o = new THREE.Vector3(+ev[4], +ev[5], +ev[6]);
+      for (let k = 0; k < W.n; k++){
+        dirV.set(+ev[7], +ev[8], +ev[9]);
+        if (W.n > 1){ dirV.x += rand(-W.spread, W.spread); dirV.y += rand(-W.spread, W.spread)*0.6; dirV.z += rand(-W.spread, W.spread); }
+        spawnProj(o, dirV, W.speed, { own:b.id, team:b.team, auth:false, wi:0, dmg:0, c:b.f.c3, r:W.r, grav:W.grav, f:b.f });
+      }
+      b.kick = 1;
+      SFX.play((ev[3] | 0) === 2 ? 'bigsquirt' : 'squirt', clamp(1 - Math.hypot(o.x - player.pos.x, o.z - player.pos.z)/38, 0.1, 0.7));
+    } else if (type === 'h' || type === 'H'){
+      // h: this player hit someone; H: one of the host's bots hit someone (the shooter rides along)
+      const fl = ev[4] | 0, sid = type === 'H' ? ev[6] : fr.id, shooter = type === 'H' ? (FIGHTERS.find(x => x.id === sid) || fr) : fr;
+      if (ev[2] === NET.me && player.alive && canHit(shooter.team, player.team)){
         const amt = fl & 8 ? player.hp + 1 : fl & 4 ? Math.ceil(player.maxHp*0.5) + 5 : clamp(+ev[3] || 0, 0, 200);
-        hurtPlayer(amt, fr.f, fr.pos.x, fr.pos.z, fr.id, ev[5] | 0, !!(fl & 2), !!(fl & 12));
-      } else { const tg = FIGHTERS.find(x => x.id === ev[2]); if (tg && tg.alive) voiceHurt(tg, tg.f, tg.pos.x, tg.pos.z, false); }
-    } else if (type === 'k'){
-      const killer = ev[2], kf = killer === NET.me ? S.flavor : (fighterById(killer) || {}).f;
+        hurtPlayer(amt, shooter.f, shooter.pos.x, shooter.pos.z, sid, ev[5] | 0, !!(fl & 2), !!(fl & 12));
+      } else {
+        const tg = FIGHTERS.find(x => x.id === ev[2]);
+        if (tg && tg.alive && type === 'h' && NET.host && tg.kind === 'bot' && canHit(fr.team, tg.team)){
+          const amt = fl & 8 ? tg.hp + 1 : fl & 4 ? Math.ceil(tg.maxHp*0.5) + 5 : clamp(+ev[3] || 0, 0, 200);
+          tg.flash = 0.09; damageBot(tg, amt, { own:fr.id, wi:ev[5] | 0, slow:!!(fl & 2) });
+        } else if (tg && tg.alive && typeof voiceHurt === 'function') voiceHurt(tg, tg.f, tg.pos.x, tg.pos.z, false);
+      }
+    } else if (type === 'k' || type === 'K'){
+      // k: this player was splatted; K: one of the host's bots was
+      const victim = type === 'K' ? FIGHTERS.find(x => x.id === ev[2]) : fr; if (!victim) continue;
+      const killer = type === 'K' ? ev[3] : ev[2], wi = (type === 'K' ? ev[4] : ev[3]) | 0;
+      const kf = killer === NET.me ? S.flavor : (fighterById(killer) || {}).f;
       if (killer === NET.me){ player.k++; SFX.play('kill'); }
-      voiceDeath(fr.f, fr.pos.x, fr.pos.z, false);
-      addParticles(fr.pos.x, fr.pos.y + 0.6, fr.pos.z, fr.f.c3, 40, 7, 0.13); addStain(fr.pos.x, fr.pos.y, fr.pos.z, fr.f.c3, 1.25);
-      SFX.play('pop', clamp(1.2 - Math.hypot(fr.pos.x - player.pos.x, fr.pos.z - player.pos.z)/40, 0.25, 1));
-      if (killer === 'bomb') feed(null, 'Juice bomb', fr.f, fr.name);
-      else if (killer === fr.id) feed(fr.f, fr.name, fr.f, 'themself');
-      else feed(kf || fr.f, killer === NET.me ? 'You' : nameOf(killer), fr.f, fr.name);
-      fr.alive = false;
+      else if (NET.host){ const kb = FIGHTERS.find(x => x.id === killer && x.kind === 'bot'); if (kb) kb.k++; }
+      if (victim.kind === 'bot') continue;      // the host already showed its own bot going down
+      if (typeof voiceDeath === 'function') voiceDeath(victim.f, victim.pos.x, victim.pos.z, false);
+      addParticles(victim.pos.x, victim.pos.y + 0.6, victim.pos.z, victim.f.c3, 40, 7, 0.13); addStain(victim.pos.x, victim.pos.y, victim.pos.z, victim.f.c3, 1.25);
+      SFX.play('pop', clamp(1.2 - Math.hypot(victim.pos.x - player.pos.x, victim.pos.z - player.pos.z)/40, 0.25, 1));
+      if (killer === 'bomb') feed(null, 'Juice bomb', victim.f, victim.name);
+      else if (killer === victim.id) feed(victim.f, victim.name, victim.f, 'themself');
+      else feed(kf || victim.f, killer === NET.me ? 'You' : nameOf(killer), victim.f, victim.name);
+      victim.alive = false;
     } else if (type === 'a' && NET.host){
       matchAction(ev[2] === 'defuse' ? 'defuse' : 'plant', fr.id, { x:+ev[3], z:+ev[4], site:ev[5] === 'B' ? 'B' : 'A' });
     }
   }
-  NET.seen[fr.id] = max;
+  seenMap[fr.id] = max;
 }
 function netTick(dt){
   const g = NET.game; if (!g) return;
@@ -4007,12 +4325,14 @@ function netTick(dt){
     const ps = pr.presence;
     if (!ps || ps.v !== 1) continue;
     let fr = FIGHTERS.find(f => f.id === pr.peer);
+    if (fr && fr.kind !== 'remote') continue;
     const nm = cleanName(ps.nm), team = ps.tm === 'a' || ps.tm === 'b' ? ps.tm : null, fl = flavorById(ps.fl);
     if (!fr){
       fr = makeFighter({ id:pr.peer, kind:'remote', name:nm, f:fl, team });
       if (Array.isArray(ps.s)) fr.pos.set(+ps.s[0] || 0, +ps.s[1] || 0, +ps.s[2] || 0);
       fr.tp.copy(fr.pos); fr.tface = fr.face;
-      NET.seen[pr.peer] = Array.isArray(ps.e) ? ps.e.reduce((a, e) => Math.max(a, (e && e[0]) || 0), 0) : 0;
+      const top = arr => Array.isArray(arr) ? arr.reduce((a, e) => Math.max(a, (e && e[0]) || 0), 0) : 0;
+      NET.seen[pr.peer] = top(ps.e); NET.seenFx[pr.peer] = top(ps.fx);
       if (S.mode === 'playing') flashNote(nm + ' joined');
     } else if (fr.look.f !== fl.id || fr.look.team !== team || fr.look.name !== nm){
       fr.f = fl; fr.team = team; fr.name = nm; buildFighterMesh(fr);
@@ -4020,12 +4340,15 @@ function netTick(dt){
     if (Array.isArray(ps.s)){ fr.tp.set(+ps.s[0] || 0, +ps.s[1] || 0, +ps.s[2] || 0); fr.tface = (+ps.s[3] || 0) + Math.PI; fr.tcr = +ps.s[5] ? 1 : 0; }
     const was = fr.alive; fr.alive = !!ps.al; if (!was && fr.alive){ fr.pos.copy(fr.tp); fr.face = fr.tface; }
     fr.hp = ps.hp | 0; fr.k = ps.k | 0; fr.d = ps.d | 0; fr.wi = ps.w | 0;
-    processEvents(fr, ps.e);
     if (ps.h){
-      hostSeen = true;
+      hostSeen = true; NET.hostSeenAt = S.time;
       if (!NET.host && ps.g && ps.g !== NET.lastG){ NET.lastG = ps.g; MV = unpackMatch(ps.g); }
+      if (!NET.host){ NET.hostBotFill = !!ps.bf; syncHostBots(ps.bt); }
     }
+    processEvents(fr, ps.e, false);
+    processEvents(fr, ps.fx, true);
   }
+  if (!NET.host && !hostSeen && S.time - (NET.hostSeenAt || 0) > 3) syncHostBots([]);
   if (!NET.teamPicked && hostSeen){
     NET.teamPicked = true;
     const n = { a:0, b:0 }; FIGHTERS.forEach(f => { if (f.kind === 'remote' && (f.team === 'a' || f.team === 'b')) n[f.team]++; });
@@ -4035,21 +4358,39 @@ function netTick(dt){
   for (const fr of FIGHTERS.slice()){
     if (fr.kind === 'remote' && !peers.some(p => p.peer === fr.id)){ if (S.mode === 'playing') flashNote(fr.name + ' left'); removeFighter(fr); }
   }
+  // up to NET_MAX people a lobby: if one ever has more, the latest arrivals step back out
+  if (!NET.host && NET.me && NET.joinWall){
+    const others = peers.filter(p => !p.sameTab && p.presence && p.presence.v === 1);
+    if (others.length >= NET_MAX && others.filter(p => (+p.presence.j || 0) < NET.joinWall).length >= NET_MAX){
+      leaveLobby(); showOnline(); setNetStatus('That lobby is full. Up to ' + NET_MAX + ' people can play in one lobby.', true); return;
+    }
+  }
+  if (NET.host && M.mode === 'ffa' && M.phase === 'live'){
+    const n = FIGHTERS.filter(f => f.kind === 'remote').length;
+    if (n !== NET.lastHumans){ NET.lastHumans = n; syncBots('ffa'); }
+  }
   if (!NET.host){
     MV.t = Math.max(0, MV.t - dt); if (MV.bomb && MV.bomb.st === 'planted') MV.bomb.t = Math.max(0, MV.bomb.t - dt);
     if (NET.p2p){
-      const now = performance.now();
+      const now = performance.now(), why = g.closedBy ? g.closedBy() : null;
+      if (why === 'host' || why === 'gone'){ leaveLobby(); showOnline(); setNetStatus('The host closed the lobby.', true); return; }
+      if (why === 'full'){ leaveLobby(); showOnline(); setNetStatus('That lobby is full. Up to ' + NET_MAX + ' people can play in one lobby.', true); return; }
       if (!g.connected() && now - NET.joinedAtMs > 3000){
         NET.lostAt = NET.lostAt || now;
-        if (now - NET.lostAt > 1500){ NET.lostAt = 0; leaveLobby(); showOnline(); setNetStatus('The host closed the lobby, or the connection to them dropped.', true); return; }
+        if (now - NET.lostAt > (g.hostAway && g.hostAway() ? 125000 : 35000)){ NET.lostAt = 0; leaveLobby(); showOnline(); setNetStatus('Lost the connection to the host. If they are still playing, join again with the same code.', true); return; }
       } else NET.lostAt = 0;
     }
     if (!NET.p2p && !hostSeen && S.time - NET.joinedAt > 4 && NET.me){
       const ids = peers.filter(p => p.sameTab || (p.presence && p.presence.v === 1)).map(p => p.peer).sort();
       if (ids[0] === NET.me){
-        NET.host = true;
+        NET.host = true; NET.botFill = NET.hostBotFill !== false;
+        syncHostBots([]);                     // the old host's bots leave with them; this page's own bots take their places
         M = MV.phase === 'idle' ? Object.assign(newMatchState(NET.mode), { phase:'lobby' }) : JSON.parse(JSON.stringify(MV));
         MV = M; NET.mode = M.mode; flashNote('The host left. You are hosting now');
+        if (M.phase === 'live' || M.phase === 'freeze'){
+          syncBots(M.mode);
+          if (M.bomb && M.bomb.st === 'carried' && !fighterById(M.bomb.by)){ const atk = onTeam(M.att).filter(f => f.alive); if (atk.length) M.bomb.by = pick(atk).id; else M.bomb.st = 'none'; }
+        }
       }
     }
   }
@@ -4063,7 +4404,8 @@ function netTick(dt){
   const pill = $('netPill');
   if (S.mode === 'playing' || S.mode === 'paused'){
     pill.hidden = false;
-    pill.textContent = (g.connected() ? 'Lobby ' + NET.code + ' · ' + (1 + FIGHTERS.filter(f => f.kind === 'remote').length) + ' playing' : 'Reconnecting…') + (NET.host ? ' · hosting' : '');
+    const away = !NET.host && g.hostAway && g.hostAway();
+    pill.textContent = (g.connected() ? (away ? 'The host’s game is in the background. Waiting…' : 'Lobby ' + NET.code + ' · ' + (1 + FIGHTERS.filter(f => f.kind === 'remote').length) + ' playing') : 'Reconnecting…') + (NET.host ? ' · hosting' : '');
   } else pill.hidden = true;
 }
 
@@ -4077,14 +4419,15 @@ function showLobby(){
 }
 function renderLobby(){
   if (!NET.game) return;
-  const mode = NET.host ? NET.mode : MV.mode;
+  const mode = NET.host ? NET.mode : MV.mode, fill = NET.host ? NET.botFill : !!NET.hostBotFill;
   $('lobbyCode').textContent = NET.code;
   if ($('inviteLink').value !== inviteLink(NET.code)){ $('inviteLink').value = inviteLink(NET.code); $('inviteMsg').textContent = ''; }
-  $('lobbyMode').textContent = (mode === 'ffa' ? 'Splat Fest: everyone for themselves, first to ' + FFA.target + ' splats' : 'Juice Bomb: first team to ' + BOMB.toWin + ' rounds') + '. Share the code with your friends.';
+  $('lobbyMode').textContent = (mode === 'ffa' ? 'Splat Fest: everyone for themselves, first to ' + FFA.target + ' splats' : 'Juice Bomb: ' + TEAM_SIZE + ' vs ' + TEAM_SIZE + ', first team to ' + BOMB.toWin + ' rounds') +
+    '. Up to ' + NET_MAX + ' people can join' + (fill ? ', and bots fill the empty slots.' : '. Bots are off.');
   const list = [{ id:NET.me || 'me', name:NET.nick, f:S.flavor, team:player.team, me:true, host:NET.host }]
     .concat(FIGHTERS.filter(f => f.kind === 'remote').map(f => ({ id:f.id, name:f.name, f:f.f, team:f.team, host:NET.game.peers().some(p => p.peer === f.id && p.presence && p.presence.h) })));
   const box = $('teams'); box.textContent = ''; box.classList.toggle('solo', mode === 'ffa');
-  const col = (title, color, rows) => {
+  const col = (title, color, rows, bots) => {
     const d = document.createElement('div'); d.className = 'team'; if (color) d.style.setProperty('--tc', color);
     const h = document.createElement('h3'); if (color){ const i = document.createElement('i'); h.appendChild(i); } h.append(title); d.appendChild(h);
     const ul = document.createElement('ul'); ul.className = 'plist';
@@ -4095,16 +4438,22 @@ function renderLobby(){
       if (r.host){ const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'host'; li.appendChild(t); }
       ul.appendChild(li);
     });
-    if (!rows.length){ const li = document.createElement('li'); li.className = 'small'; li.textContent = 'Nobody yet'; ul.appendChild(li); }
+    if (bots > 0){ const li = document.createElement('li'); li.className = 'bots'; li.textContent = '+ ' + bots + (bots === 1 ? ' bot' : ' bots'); ul.appendChild(li); }
+    if (!rows.length && !bots){ const li = document.createElement('li'); li.className = 'small'; li.textContent = 'Nobody yet'; ul.appendChild(li); }
     d.appendChild(ul); box.appendChild(d);
   };
-  if (mode === 'ffa') col('Players (' + list.length + ')', null, list);
-  else { col(TEAMS.a.name, TEAMS.a.color, list.filter(r => r.team === 'a')); col(TEAMS.b.name, TEAMS.b.color, list.filter(r => r.team !== 'a')); }
+  if (mode === 'ffa') col('Players (' + list.length + ')', null, list, fill ? Math.max(0, FFA_SIZE - list.length) : 0);
+  else {
+    const A = list.filter(r => r.team === 'a'), B = list.filter(r => r.team !== 'a');
+    col(TEAMS.a.name, TEAMS.a.color, A, fill ? Math.max(0, TEAM_SIZE - A.length) : 0); col(TEAMS.b.name, TEAMS.b.color, B, fill ? Math.max(0, TEAM_SIZE - B.length) : 0);
+  }
   $('teamBtn').hidden = mode === 'ffa';
+  const bb = $('botBtn'); if (bb){ bb.hidden = !NET.host; bb.textContent = 'Bots: ' + (NET.botFill ? 'on' : 'off'); bb.setAttribute('aria-pressed', NET.botFill ? 'true' : 'false'); }
   const sb = $('startMatchBtn'); sb.hidden = !NET.host;
   const okBomb = list.some(r => r.team === 'a') && list.some(r => r.team !== 'a');
-  sb.disabled = list.length < 2 || (mode === 'bomb' && !okBomb);
-  if (NET.host) setLobbyStatus(list.length < 2 ? 'Waiting for at least one more player…' : mode === 'bomb' && !okBomb ? 'Each team needs at least one player.' : 'Ready when you are.');
+  sb.disabled = !fill && (list.length < 2 || (mode === 'bomb' && !okBomb));
+  if (NET.host) setLobbyStatus(fill ? (list.length < 2 ? 'Ready. Bots fill the empty slots, and friends can still join after you start.' : 'Ready when you are.')
+    : list.length < 2 ? 'Waiting for at least one more player, or turn bots on.' : mode === 'bomb' && !okBomb ? 'Each team needs at least one player, or turn bots on.' : 'Ready when you are.');
   else if (S.time - NET.joinedAt > 0.5) setLobbyStatus(MV.phase === 'idle' ? 'Looking for the host…' : 'Waiting for the host to start.');
 }
 function startOnlineGame(){
@@ -4132,7 +4481,7 @@ $('copyInvite').addEventListener('click', () => {
   const copy = () => { try { navigator.clipboard.writeText(link).then(done, fallback); } catch (e) { fallback(); } setTimeout(fallback, 1500); };
   if (canShare()){
     // the phone's share sheet (Messages, WhatsApp and so on); cancelling it is fine, anything else falls back to copying
-    navigator.share({ title:document.title || 'Veggie Blammers 1942', text:'Join my Veggie Blammers lobby (code ' + NET.code + ')', url:link })
+    navigator.share({ title:document.title || 'Blammers', text:'Join my ' + (document.title || 'game') + ' lobby (code ' + NET.code + ')', url:link })
       .then(() => { msg.textContent = 'Invite sent.'; }, err => { if (!err || err.name !== 'AbortError') copy(); });
     return;
   }
@@ -4146,7 +4495,12 @@ $('segBomb').addEventListener('click', () => { NET.mode = 'bomb'; $('segBomb').s
 $('segFfa').addEventListener('click', () => { NET.mode = 'ffa'; $('segFfa').setAttribute('aria-pressed', 'true'); $('segBomb').setAttribute('aria-pressed', 'false'); });
 $('onlineBack').addEventListener('click', () => toMenu());
 $('leaveBtn').addEventListener('click', () => { leaveLobby(); showOnline(); });
-$('teamBtn').addEventListener('click', () => { player.team = player.team === 'a' ? 'b' : 'a'; renderLobby(); });
+$('teamBtn').addEventListener('click', () => {
+  const to = player.team === 'a' ? 'b' : 'a';
+  if (FIGHTERS.filter(f => f.kind === 'remote' && f.team === to).length >= TEAM_SIZE){ setLobbyStatus(TEAMS[to].name + ' is full (' + TEAM_SIZE + ' players).', true); return; }
+  player.team = to; renderLobby();
+});
+$('botBtn').addEventListener('click', () => { if (!NET.host) return; NET.botFill = !NET.botFill; store('jbb-bots', NET.botFill ? 1 : 0); renderLobby(); });
 $('startMatchBtn').addEventListener('click', () => {
   if (!NET.host) return;
   SFX.init(); NET.mode = NET.mode || 'bomb';
@@ -4368,8 +4722,8 @@ function startSolo(game){
   Object.assign(S, { mode:'playing', wave:0, phase:'break', phaseT:2.4, toSpawn:0, spawnT:0, splats:0, shots:0, hits:0, ml:0, killer:null });
   player.id = 'me'; player.team = game === 'bomb' ? 'a' : null;
   resetPlayer();
-  if (game === 'bomb'){ addBots(3, 'a', 0); addBots(4, 'b', 3); startMatch('bomb'); }
-  else if (game === 'ffa'){ addBots(5, null, 0); startMatch('ffa'); const [x, z] = spawnSpot(null, player); respawnPlayer(x, z, faceCenter(x, z) + Math.PI); }
+  if (game === 'bomb') startMatch('bomb');
+  else if (game === 'ffa'){ startMatch('ffa'); const [x, z] = spawnSpot(null, player); respawnPlayer(x, z, faceCenter(x, z) + Math.PI); }
   else { M = newMatchState('bomb'); MV = M; }
   enterHud();
   if (game === 'waves') banner('Get ready', 'Splat every veggie that isn’t ' + S.flavor.name);
@@ -4450,7 +4804,7 @@ $('againBtn').addEventListener('click', () => startSolo('waves'));
 $('menuBtn').addEventListener('click', toMenu);
 $('endAgain').addEventListener('click', () => {
   if (!S.online){ startSolo(S.game); return; }
-  if (NET.host){ M = newMatchState(NET.mode); M.phase = 'lobby'; MV = M; }
+  if (NET.host){ M = newMatchState(NET.mode); M.phase = 'lobby'; MV = M; FIGHTERS.filter(f => f.kind === 'bot').forEach(removeFighter); }
   showLobby();
 });
 $('endMenu').addEventListener('click', () => { if (S.online){ leaveLobby(); showOnline(); } else toMenu(); });
@@ -4469,6 +4823,23 @@ renderer.domElement.addEventListener('webglcontextlost', e => {
   d.querySelector('button').addEventListener('click', () => location.reload());
   document.body.appendChild(d);
 }, false);
+// if the device hands the graphics back by itself, carry on without a reload (three.js sends everything to the graphics chip again)
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  const d = $('glLost'); if (d) d.remove();
+  flashNote('Graphics are back');
+}, false);
+// slow device: after a few seconds of play below about 38 frames a second, lower the resolution once, then turn shadows off
+const QUAL = { t:0, n:0, sum:0, level:0 };
+function autoQuality(dt){
+  if (QUAL.level >= 2 || S.mode !== 'playing' || document.hidden) return;
+  QUAL.t += dt; QUAL.n++; QUAL.sum += dt;
+  if (QUAL.t < 6) return;
+  const avg = QUAL.sum/QUAL.n; QUAL.t = 0; QUAL.n = 0; QUAL.sum = 0;
+  if (avg < 1/38) return;
+  QUAL.level++;
+  if (QUAL.level === 1){ renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight); flashNote('Lowered the graphics a little to keep the game smooth'); }
+  else { sun.castShadow = false; flashNote('Turned shadows off to keep the game smooth'); }
+}
 
 /* ---------- main loop ---------- */
 let lastT = performance.now();
@@ -4491,7 +4862,7 @@ function frame(now){
       drawFighters(dt);
     }
     updateProjectiles(dt); updatePools(dt);
-    updateHUD(dt);
+    updateHUD(dt); autoQuality(dt);
   } else if (m === 'over'){
     player.pitch = damp(player.pitch, -0.35, 2, dt);
     camera.position.y = damp(camera.position.y, player.pos.y + 0.3, 2.5, dt);
@@ -4517,6 +4888,7 @@ function boot(data){
     $('menu').querySelector('.tag').after(t);
   }
   if (input.touch && typeof navigator.share === 'function') $('copyInvite').textContent = 'Share link';
+  window.__jbReady = true;
   const saved = data.flavor || store('jbb-flavor');
   setFlavor(FLAVORS.find(f => f.id === saved) || FLAVORS[0]);
   NET.nick = cleanName(store('jbb-nick') || ('Player ' + (10 + Math.floor(Math.random()*90))));
