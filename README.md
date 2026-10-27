@@ -4,6 +4,8 @@ A 3D first-person shooter set in a 1942 victory garden. Every fighter is a veget
 
 **Play:** https://creamsicie.github.io/veggieblammers2/ in any current browser, on a computer, iPhone, iPad or Android phone. No install and no account.
 
+**Version:** Victory.1, shown on the title screen under the logo.
+
 ## Modes
 
 - **Wave Splash** (solo): hold off growing waves of veggies. Every fifth wave brings a giant.
@@ -22,7 +24,7 @@ The host's browser runs the match, so the host keeps the game open. Players conn
 
 ### If a friend can't join
 
-- **Reload the page**, everyone. Lobbies only work between players on the same version.
+- **Reload the page**, everyone, and check that the title screen shows the same version (Victory.1). Lobbies only work between players on the same version.
 - **Opera:** Opera's built-in VPN blocks direct game connections. Turn the VPN off (the VPN badge at the left of the address bar), or open Settings, search for **WebRTC**, and choose **Use any suitable network interface**. Other VPNs and some school or work networks can block the game too.
 - **Host on a phone:** the host has to keep the game on screen. Switching apps pauses it; friends wait up to two minutes for the host to come back.
 
