@@ -204,6 +204,7 @@ body.touch .kb-only,body:not(.touch) .touch-only{display:none}
 
 /* ---------- Kool.1: modes, online, lobby, match HUD ---------- */
 .titlewrap{display:grid;justify-items:center;gap:8px}
+.ver{font-family:var(--num);font-weight:800;font-size:12px;letter-spacing:.08em;opacity:.75;margin-top:-2px}
 .badge{display:inline-block;font-family:var(--num);font-weight:800;font-size:13px;letter-spacing:.06em;padding:3px 12px 4px;border:3px solid var(--ink);border-radius:999px;background:var(--flavor);color:var(--flavor-ink);box-shadow:3px 3px 0 var(--ink);transform:rotate(-3deg)}
 .modes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .mode{appearance:none;cursor:pointer;text-align:left;color:var(--ink);background:var(--sugar);border:3px solid var(--ink);border-radius:16px;padding:12px 14px 13px;display:grid;gap:4px;align-content:start;box-shadow:0 4px 0 var(--ink);transition:transform .1s,box-shadow .1s}
@@ -383,7 +384,7 @@ body.touch #bombNote{bottom:calc(200px + env(safe-area-inset-bottom,0px))}
 
 <div id="menu" class="screen">
   <div class="panel">
-    <div class="titlewrap"><h1 id="logo" class="logo" aria-label="Veggie Blammers"></h1><span class="badge">1942 Edition</span></div>
+    <div class="titlewrap"><h1 id="logo" class="logo" aria-label="Veggie Blammers"></h1><span class="badge">1942 Edition</span><span class="ver">Version Victory.1</span></div>
     <p class="tag">Pick a veggie, grab a juice box, and blam every other veggie out of the victory garden. Play solo against bots, or online with friends using a 4-digit lobby code.</p>
     <div class="cap">Choose your veggie</div>
     <div id="flavorGrid" class="flavors" role="group" aria-label="Flavors"></div>
@@ -4154,7 +4155,7 @@ async function enterGame(code, host){
     const c = e && e.code;
     if (c === 'code_taken' && host){ $('createBtn').disabled = $('joinBtn').disabled = false; return createLobby(); }
     if (NET.p2p){
-      setNetStatus(c === 'not_found' ? 'No lobby with code ' + code + ' right now. Check the code with whoever is hosting. If they are on a phone, the game has to stay open on their screen. If either of you had the game open from before, reload the page so you both have the latest version.'
+      setNetStatus(c === 'not_found' ? 'No lobby with code ' + code + ' right now. Check the code with whoever is hosting. If they are on a phone, the game has to stay open on their screen. If either of you had the game open from before, reload the page so you both have the latest version (Victory.1, shown on the title screen).'
         : c === 'full' ? 'That lobby is full. Up to ' + NET_MAX + ' people can play in one lobby.'
         : c === 'no_route' ? "Found the lobby but couldn't connect to the host. A VPN (Opera's built-in one counts) or a school or work network can block game connections. Turn the VPN off or try another network, then join again."
         : c === 'not_permitted' ? "This browser can't connect players directly. Try a current Chrome, Edge, Firefox, Opera or Safari."
