@@ -2709,9 +2709,9 @@ function hurtPlayer(amount, f, fromX, fromZ, byId, wi, slow, raw){
   if (!p.alive) return;
   if (!raw) amount *= p.mods.armor || 1;
   p.hp = Math.max(0, p.hp - amount); p.lastHurt = S.time;
-  if (byId !== p.id){ p.tagT = 0.3; if (p.onGround){ p.vel.x *= 0.65; p.vel.z *= 0.65; } }   // getting tagged slows you, as in CS
+  if (byId !== p.id){ p.tagT = 0.15; if (p.onGround){ p.vel.x *= 0.9; p.vel.z *= 0.9; } }   // getting tagged slows you a little (much less than CS, so you can still dodge)
   if (p.hp > 0) voiceHurt(p, S.flavor, p.pos.x, p.pos.z, true);
-  if (slow) p.slowT = 2;
+  if (slow) p.slowT = 1.2;   // Brain Freeze: a short, light slow, so you can still get out of the way
   SFX.play('hurt');
   const dx = fromX - p.pos.x, dz = fromZ - p.pos.z, d = Math.hypot(dx, dz) || 1;
   const side = (dx*Math.cos(p.yaw) - dz*Math.sin(p.yaw))/d;
@@ -2741,7 +2741,9 @@ const U = 7.4/250;                     // one CS unit in garden units: 250 u/s i
 const MOVE = {
   tick:1/100,                          // physics runs at a fixed 100 Hz, like CS at fps_max 100
   friction:4, stop:75*U,               // sv_friction, sv_stopspeed
-  accel:5, airAccel:10, airCap:30*U,   // sv_accelerate, sv_airaccelerate and the 30-unit air cap that makes air strafing work
+  accel:5,                             // sv_accelerate
+  airAccel:30, airCap:45*U,            // air strafing: stock 1.6 is airaccelerate 10 with a 30-unit cap; these build hop speed
+                                       // about 60% faster and let quick mouse flicks gain speed instead of losing it
   walk:0.52, duck:0.333,               // walk (Shift) and ducked speed multipliers
   hopCap:1.8,                          // bunny hops can build up to 1.8x run speed (stock 1.6 crops at 1.2x)
   stamina:1.3158,                      // seconds of landing slowdown after a jump (fuser2, 1315.789 ms)
@@ -2753,7 +2755,7 @@ const MOVE = {
 };
 function maxSpeed(p){
   const w = WEAPONS[p.weapon];
-  return p.speed * (w.mspd || 1) * (p.zoomT > 0.5 ? 0.71 : 1) * (p.slowT > 0 ? 0.6 : 1) * (p.tagT > 0 ? 0.6 : 1);
+  return p.speed * (w.mspd || 1) * (p.zoomT > 0.5 ? 0.71 : 1) * (p.slowT > 0 ? 0.8 : 1) * (p.tagT > 0 ? 0.85 : 1);
 }
 function pmAccelerate(p, wx, wz, wishSpd, accel, dt){
   const add = wishSpd - (p.vel.x*wx + p.vel.z*wz);
@@ -3365,7 +3367,7 @@ function hitFighter(f, dmg, info){
 }
 function damageBot(b, dmg, info){
   if (!b.alive) return;
-  b.hp -= dmg; if (info.slow) b.slowT = 2;
+  b.hp -= dmg; if (info.slow) b.slowT = 1.2;
   const a = fighterById(info.own);
   if (a && a.alive && !b.target) { b.target = a; b.react = 0.2; }
   if (b.hp <= 0){ botDie(b, info.own, info.wi); return; }
@@ -3552,7 +3554,7 @@ function updateBot(b, dt){
       b.dirX = Math.cos(ang); b.dirZ = Math.sin(ang);
     }
   }
-  const spd = frozen || b.useT > 0 ? 0 : 5 * (b.slowT > 0 ? 0.55 : 1) * (stickyAt(b.pos.x, b.pos.z, b.pos.y) ? 0.55 : 1);
+  const spd = frozen || b.useT > 0 ? 0 : 5 * (b.slowT > 0 ? 0.8 : 1) * (stickyAt(b.pos.x, b.pos.z, b.pos.y) ? 0.55 : 1);
   b.vel.x = damp(b.vel.x, b.dirX*spd, 6, dt); b.vel.z = damp(b.vel.z, b.dirZ*spd, 6, dt);
   b.pos.x += b.vel.x*dt; b.pos.z += b.vel.z*dt;
   for (const o of [player, ...FIGHTERS]){

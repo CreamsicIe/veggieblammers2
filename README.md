@@ -39,6 +39,8 @@ The game runs in Safari with touch controls: drag on the left side of the screen
 
 Counter-Strike 1.6 style: ground friction and acceleration, air strafing, bunny hopping (hold Space, then strafe with A or D while turning the same way), crouch-jumping onto higher ledges, footsteps other players can hear, and rocket jumping with the Juice Cannon.
 
+A few things are tuned for freer movement than stock 1.6. Air strafing accelerates faster, so hop speed builds in two or three hops and quick mouse flicks gain speed instead of losing it. Getting hit only slows you a little, and Brain Freeze slows you less and for less time, so you can keep dodging under fire.
+
 ## Controls
 
 WASD move · mouse aim · click squeeze · R new box · 1–9 or scroll to swap · F ice pop bonk · E plant or defuse · Space jump (hold to bunny hop) · Shift walk quietly · C crouch · 6 then jump and fire at your feet to rocket jump · right-click zoom (Long Straw) · Tab scoreboard · Esc pause · N music · M sound
