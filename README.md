@@ -4,7 +4,7 @@ A 3D first-person shooter set in a 1942 victory garden. Every fighter is a veget
 
 **Play:** https://creamsicie.github.io/veggieblammers2/ in any current browser, on a computer, iPhone, iPad or Android phone. No install and no account.
 
-**Version:** Victory.1, shown on the title screen under the logo.
+**Version:** Victory.2, shown on the title screen under the logo.
 
 ## Modes
 
@@ -24,7 +24,7 @@ The host's browser runs the match, so the host keeps the game open. Players conn
 
 ### If a friend can't join
 
-- **Reload the page**, everyone, and check that the title screen shows the same version (Victory.1). Lobbies only work between players on the same version.
+- **Reload the page**, everyone, and check that the title screen shows the same version (Victory.2). Lobbies only work between players on the same version.
 - **Opera:** Opera's built-in VPN blocks direct game connections. Turn the VPN off (the VPN badge at the left of the address bar), or open Settings, search for **WebRTC**, and choose **Use any suitable network interface**. Other VPNs and some school or work networks can block the game too.
 - **Host on a phone:** the host has to keep the game on screen. Switching apps pauses it; friends wait up to two minutes for the host to come back.
 
@@ -41,7 +41,7 @@ The game runs in Safari with touch controls: drag on the left side of the screen
 
 Counter-Strike 1.6 style: ground friction and acceleration, air strafing, bunny hopping (hold Space, then strafe with A or D while turning the same way), crouch-jumping onto higher ledges, footsteps other players can hear, and rocket jumping with the Juice Cannon.
 
-A few things are tuned for freer movement than stock 1.6. Air strafing accelerates faster, so hop speed builds in two or three hops and quick mouse flicks gain speed instead of losing it. Getting hit only slows you a little, and Brain Freeze slows you less and for less time, so you can keep dodging under fire.
+A few things are tuned for freer movement than stock 1.6. Air strafing accelerates faster, so hop speed builds in two or three hops and quick mouse flicks gain speed instead of losing it. On foot there is no momentum: you move exactly where the keys point, at full speed, and can switch direction instantly. Getting hit (Brain Freeze included) never slows you down.
 
 ## Controls
 

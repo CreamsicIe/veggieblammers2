@@ -384,7 +384,7 @@ body.touch #bombNote{bottom:calc(200px + env(safe-area-inset-bottom,0px))}
 
 <div id="menu" class="screen">
   <div class="panel">
-    <div class="titlewrap"><h1 id="logo" class="logo" aria-label="Veggie Blammers"></h1><span class="badge">1942 Edition</span><span class="ver">Version Victory.1</span></div>
+    <div class="titlewrap"><h1 id="logo" class="logo" aria-label="Veggie Blammers"></h1><span class="badge">1942 Edition</span><span class="ver">Version Victory.2</span></div>
     <p class="tag">Pick a veggie, grab a juice box, and blam every other veggie out of the victory garden. Play solo against bots, or online with friends using a 4-digit lobby code.</p>
     <div class="cap">Choose your veggie</div>
     <div id="flavorGrid" class="flavors" role="group" aria-label="Flavors"></div>
@@ -2710,7 +2710,7 @@ function hurtPlayer(amount, f, fromX, fromZ, byId, wi, slow, raw){
   if (!p.alive) return;
   if (!raw) amount *= p.mods.armor || 1;
   p.hp = Math.max(0, p.hp - amount); p.lastHurt = S.time;
-  if (byId !== p.id){ p.tagT = 0.15; if (p.onGround){ p.vel.x *= 0.9; p.vel.z *= 0.9; } }   // getting tagged slows you a little (much less than CS, so you can still dodge)
+  if (byId !== p.id){ /* getting hit never slows you */ }   // getting tagged slows you a little (much less than CS, so you can still dodge)
   if (p.hp > 0) voiceHurt(p, S.flavor, p.pos.x, p.pos.z, true);
   if (slow) p.slowT = 1.2;   // Brain Freeze: a short, light slow, so you can still get out of the way
   SFX.play('hurt');
@@ -2756,7 +2756,7 @@ const MOVE = {
 };
 function maxSpeed(p){
   const w = WEAPONS[p.weapon];
-  return p.speed * (w.mspd || 1) * (p.zoomT > 0.5 ? 0.71 : 1) * (p.slowT > 0 ? 0.8 : 1) * (p.tagT > 0 ? 0.85 : 1);
+  return p.speed * (w.mspd || 1) * (p.zoomT > 0.5 ? 0.71 : 1) * 1;
 }
 function pmAccelerate(p, wx, wz, wishSpd, accel, dt){
   const add = wishSpd - (p.vel.x*wx + p.vel.z*wz);
@@ -2805,10 +2805,8 @@ function pmTick(p, dt, wx, wz, wishSpd, wantJump, wantDuck, maxSpd){
   p.stam = Math.max(0, p.stam - dt);
   if (p.onGround){
     p.groundT += dt;
-    const sp = Math.hypot(p.vel.x, p.vel.z);
-    if (sp > 0.003){ const control = sp < MOVE.stop ? MOVE.stop : sp, k = Math.max(0, sp - control*MOVE.friction*dt)/sp; p.vel.x *= k; p.vel.z *= k; }
-    pmAccelerate(p, wx, wz, wishSpd, MOVE.accel, dt);
-    if (p.stam > 0){ const r = Math.max(0, 1 - p.stam*0.19); p.vel.x *= r; p.vel.z *= r; }
+    // on foot there is no momentum: you go exactly where the keys point, at full speed, the instant you press them
+    p.vel.x = wx*wishSpd; p.vel.z = wz*wishSpd;
   } else { p.groundT = 0; pmAirAccelerate(p, wx, wz, wishSpd, dt); }
   // move, slide along whatever we bumped into, then settle on the ground
   p.vel.y -= GRAV*0.5*dt;
@@ -4155,7 +4153,7 @@ async function enterGame(code, host){
     const c = e && e.code;
     if (c === 'code_taken' && host){ $('createBtn').disabled = $('joinBtn').disabled = false; return createLobby(); }
     if (NET.p2p){
-      setNetStatus(c === 'not_found' ? 'No lobby with code ' + code + ' right now. Check the code with whoever is hosting. If they are on a phone, the game has to stay open on their screen. If either of you had the game open from before, reload the page so you both have the latest version (Victory.1, shown on the title screen).'
+      setNetStatus(c === 'not_found' ? 'No lobby with code ' + code + ' right now. Check the code with whoever is hosting. If they are on a phone, the game has to stay open on their screen. If either of you had the game open from before, reload the page so you both have the latest version (Victory.2, shown on the title screen).'
         : c === 'full' ? 'That lobby is full. Up to ' + NET_MAX + ' people can play in one lobby.'
         : c === 'no_route' ? "Found the lobby but couldn't connect to the host. A VPN (Opera's built-in one counts) or a school or work network can block game connections. Turn the VPN off or try another network, then join again."
         : c === 'not_permitted' ? "This browser can't connect players directly. Try a current Chrome, Edge, Firefox, Opera or Safari."
